@@ -8,6 +8,7 @@ import urllib.error
 import urllib.request
 
 from .classify import get_llm_config
+from .http_retry import urlopen_with_retry
 from .render import infer_summary
 from .types import PageData
 
@@ -112,7 +113,7 @@ def summarize_with_llm(page_data: PageData) -> str | None:
         method="POST",
     )
     try:
-        with urllib.request.urlopen(request, timeout=SUMMARIZE_TIMEOUT_SECONDS) as response:
+        with urlopen_with_retry(request, timeout=SUMMARIZE_TIMEOUT_SECONDS) as response:
             body = json.loads(response.read().decode("utf-8"))
         message = body["choices"][0]["message"]
         text = _trim_summary(str(message.get("content") or message.get("reasoning") or ""))

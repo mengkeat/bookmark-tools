@@ -6,6 +6,8 @@ import struct
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
+
+from .http_retry import urlopen_with_retry
 from pathlib import Path
 
 from .classify import get_llm_config
@@ -54,7 +56,7 @@ def _call_embedding_api(
         },
         method="POST",
     )
-    with urllib.request.urlopen(request, timeout=DEFAULT_TIMEOUT) as response:
+    with urlopen_with_retry(request, timeout=DEFAULT_TIMEOUT) as response:
         body = json.loads(response.read().decode("utf-8"))
     body["data"].sort(key=lambda item: item["index"])
     return [item["embedding"] for item in body["data"]]

@@ -7,6 +7,8 @@ import sys
 import urllib.error
 import urllib.request
 from collections import Counter
+
+from .http_retry import urlopen_with_retry
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -256,7 +258,7 @@ def call_llm(
         method="POST",
     )
     try:
-        with urllib.request.urlopen(request, timeout=DEFAULT_TIMEOUT) as response:
+        with urlopen_with_retry(request, timeout=DEFAULT_TIMEOUT) as response:
             body = json.loads(response.read().decode("utf-8"))
         message = body["choices"][0]["message"]
         content = message.get("content") or message.get("reasoning") or ""

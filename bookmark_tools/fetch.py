@@ -5,6 +5,7 @@ import re
 import urllib.parse
 import urllib.request
 
+from .http_retry import urlopen_with_retry
 from .paths import DEFAULT_TIMEOUT, MAX_FETCH_BYTES
 from .types import PageData
 
@@ -20,7 +21,7 @@ def fetch_text(url: str) -> tuple[str, str]:
             "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,text/plain;q=0.8,*/*;q=0.5",
         },
     )
-    with urllib.request.urlopen(request, timeout=DEFAULT_TIMEOUT) as response:
+    with urlopen_with_retry(request, timeout=DEFAULT_TIMEOUT) as response:
         final_url = response.geturl()
         charset = response.headers.get_content_charset() or "utf-8"
         raw = response.read(MAX_FETCH_BYTES)
