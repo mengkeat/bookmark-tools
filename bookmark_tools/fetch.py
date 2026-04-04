@@ -4,6 +4,7 @@ import html
 import re
 import urllib.parse
 import urllib.request
+from html.parser import HTMLParser
 
 from .http_retry import urlopen_with_retry
 from .paths import DEFAULT_TIMEOUT, MAX_FETCH_BYTES
@@ -28,19 +29,58 @@ def fetch_text(url: str) -> tuple[str, str]:
     return final_url, raw.decode(charset, errors="replace")
 
 
+class _MetadataParser(HTMLParser):
+    """Extract title, meta tags, and lang attribute from HTML."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.title = ""
+        self.meta: dict[str, str] = {}
+        self.language = ""
+        self._in_title = False
+        self._title_parts: list[str] = []
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        attr_dict = {k.lower(): (v or "") for k, v in attrs}
+        if tag == "html" and "lang" in attr_dict:
+            self.language = attr_dict["lang"].split("-", 1)[0].lower()
+        elif tag == "title":
+            self._in_title = True
+            self._title_parts = []
+        elif self._in_title and tag != "title":
+            self._finalize_title()
+        if tag == "meta":
+            content = attr_dict.get("content", "")
+            name = attr_dict.get("property", "") or attr_dict.get("name", "")
+            if name and content:
+                self.meta.setdefault(name.lower(), content)
+
+    def handle_data(self, data: str) -> None:
+        if self._in_title:
+            self._title_parts.append(data)
+
+    def _finalize_title(self) -> None:
+        if self._in_title:
+            self._in_title = False
+            self.title = " ".join(self._title_parts).strip()
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag == "title":
+            self._finalize_title()
+
+
+def _parse_metadata(text: str) -> _MetadataParser:
+    """Parse HTML and return extracted metadata."""
+    parser = _MetadataParser()
+    parser.feed(text)
+    return parser
+
+
 def search_meta(name: str, text: str) -> str:
-    """Extract a meta tag value by property or name."""
-    patterns = [
-        rf'<meta[^>]+property=["\']{re.escape(name)}["\'][^>]+content=["\']([^"\']+)["\']',
-        rf'<meta[^>]+name=["\']{re.escape(name)}["\'][^>]+content=["\']([^"\']+)["\']',
-        rf'<meta[^>]+content=["\']([^"\']+)["\'][^>]+property=["\']{re.escape(name)}["\']',
-        rf'<meta[^>]+content=["\']([^"\']+)["\'][^>]+name=["\']{re.escape(name)}["\']',
-    ]
-    for pattern in patterns:
-        match = re.search(pattern, text, flags=re.IGNORECASE)
-        if match:
-            return html.unescape(match.group(1)).strip()
-    return ""
+    """Extract a meta tag value by property or name using the HTML parser."""
+    parser = _parse_metadata(text)
+    value = parser.meta.get(name.lower(), "")
+    return html.unescape(value).strip() if value else ""
 
 
 def clean_html(text: str) -> str:
@@ -56,19 +96,12 @@ def clean_html(text: str) -> str:
 def extract_page_data(url: str) -> PageData:
     """Fetch and extract normalized page fields used for bookmark classification."""
     final_url, raw_text = fetch_text(url)
-    title_match = re.search(r"(?is)<title[^>]*>(.*?)</title>", raw_text)
-    title = search_meta("og:title", raw_text) or (
-        html.unescape(title_match.group(1)).strip() if title_match else ""
+    parser = _parse_metadata(raw_text)
+    title = parser.meta.get("og:title", "") or parser.title
+    description = parser.meta.get("description", "") or parser.meta.get(
+        "og:description", ""
     )
-    description = search_meta("description", raw_text) or search_meta(
-        "og:description", raw_text
-    )
-    language_match = re.search(
-        r'<html[^>]+lang=["\']([a-zA-Z-]+)["\']', raw_text, flags=re.IGNORECASE
-    )
-    language = (
-        language_match.group(1).split("-", 1)[0].lower() if language_match else ""
-    ) or "en"
+    language = parser.language or "en"
     return {
         "url": final_url,
         "title": title or urllib.parse.urlparse(final_url).netloc,
