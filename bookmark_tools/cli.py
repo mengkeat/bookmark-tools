@@ -251,7 +251,13 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Add a bookmark note to the Obsidian vault."
     )
-    parser.add_argument("url", help="URL to fetch and classify")
+    parser.add_argument("url", nargs="?", help="URL to fetch and classify")
+    parser.add_argument(
+        "--file", "-f",
+        type=str,
+        default=None,
+        help="Read URLs from a file (one per line); use - for stdin",
+    )
     parser.add_argument(
         "--dry-run",
         action="store_true",
@@ -290,15 +296,30 @@ def configure_logging(*, verbose: bool = False, quiet: bool = False) -> None:
     )
 
 
-def main() -> int:
-    """Run the bookmark creation workflow and write output unless dry-run is set."""
-    load_env()
-    args = parse_args()
-    configure_logging(verbose=args.verbose, quiet=args.quiet)
-    target_path, note_text, folder_message = build_note(
-        args.url, not args.disallow_new_subfolder
-    )
-    if args.dry_run:
+def _read_urls_from_file(file_path: str) -> list[str]:
+    """Read URLs from a file (one per line) or stdin when path is '-'."""
+    import sys
+
+    if file_path == "-":
+        lines = sys.stdin.read().splitlines()
+    else:
+        lines = Path(file_path).read_text(encoding="utf-8").splitlines()
+    return [line.strip() for line in lines if line.strip() and not line.strip().startswith("#")]
+
+
+def _process_single_url(
+    url: str, *, allow_new_subfolder: bool, dry_run: bool
+) -> int:
+    """Process one URL through the bookmark pipeline. Returns 0 on success, 1 on error."""
+    try:
+        target_path, note_text, folder_message = build_note(url, allow_new_subfolder)
+    except SystemExit as exc:
+        logger.warning("%s — skipping %s", exc, url)
+        return 1
+    except Exception as exc:
+        logger.warning("Failed to process %s (%s: %s)", url, exc.__class__.__name__, exc)
+        return 1
+    if dry_run:
         print(f"Target: {target_path}")
         if folder_message:
             print(f"Folder decision: {folder_message}")
@@ -311,6 +332,37 @@ def main() -> int:
     if folder_message:
         print(folder_message)
     return 0
+
+
+def main() -> int:
+    """Run the bookmark creation workflow and write output unless dry-run is set."""
+    load_env()
+    args = parse_args()
+    configure_logging(verbose=args.verbose, quiet=args.quiet)
+
+    if args.file:
+        urls = _read_urls_from_file(args.file)
+        if not urls:
+            logger.error("No URLs found in %s", args.file)
+            return 1
+        allow_new = not args.disallow_new_subfolder
+        failures = sum(
+            _process_single_url(url, allow_new_subfolder=allow_new, dry_run=args.dry_run)
+            for url in urls
+        )
+        total = len(urls)
+        print(f"\nProcessed {total - failures}/{total} URLs successfully.")
+        return 1 if failures == total else 0
+
+    if not args.url:
+        logger.error("Either a URL argument or --file is required.")
+        return 1
+
+    return _process_single_url(
+        args.url,
+        allow_new_subfolder=not args.disallow_new_subfolder,
+        dry_run=args.dry_run,
+    )
 
 
 if __name__ == "__main__":

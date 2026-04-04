@@ -9,7 +9,7 @@ from tempfile import TemporaryDirectory
 from unittest.mock import patch
 import unittest
 
-from bookmark_tools.cli import build_note, main
+from bookmark_tools.cli import build_note, main, _read_urls_from_file
 from bookmark_tools.vault_profile import BookmarkProfile
 
 
@@ -330,6 +330,85 @@ class IntegrationCLIMainTest(unittest.TestCase):
             content = new_notes[0].read_text(encoding="utf-8")
             self.assertIn("---", content)
             self.assertIn("Summary:", content)
+
+
+class BatchImportTest(unittest.TestCase):
+    """Tests for batch URL import functionality."""
+
+    def test_read_urls_from_file_skips_comments_and_blanks(self) -> None:
+        """It reads URLs, skipping comments and blank lines."""
+        with TemporaryDirectory() as tmp:
+            url_file = Path(tmp) / "urls.txt"
+            url_file.write_text(
+                "# Comment\n"
+                "https://example.com/page1\n"
+                "\n"
+                "https://example.com/page2\n"
+                "# Another comment\n"
+                "https://example.com/page3\n",
+                encoding="utf-8",
+            )
+            urls = _read_urls_from_file(str(url_file))
+        self.assertEqual(urls, [
+            "https://example.com/page1",
+            "https://example.com/page2",
+            "https://example.com/page3",
+        ])
+
+    def test_batch_import_processes_multiple_urls(self) -> None:
+        """--file flag processes multiple URLs from a file."""
+        with TemporaryDirectory() as tmp:
+            vault_dir, bookmarks_dir = _setup_vault(tmp)
+            url_file = Path(tmp) / "urls.txt"
+            url_file.write_text(
+                "https://example.com/batch-page1\n"
+                "https://example.com/batch-page2\n",
+                encoding="utf-8",
+            )
+            env = {
+                "VAULT_PATH": str(vault_dir),
+                "BOOKMARKS_DIR": str(bookmarks_dir),
+            }
+            with (
+                patch.dict(os.environ, env, clear=True),
+                patch(
+                    "sys.argv",
+                    ["bookmark", "--file", str(url_file), "--dry-run"],
+                ),
+                patch("bookmark_tools.fetch.urllib.request.urlopen", side_effect=lambda req, **kw: _fake_urlopen(req, **kw)),
+                patch("bookmark_tools.summarize.shutil.which", return_value=None),
+            ):
+                exit_code = main()
+
+            self.assertEqual(exit_code, 0)
+
+    def test_batch_import_skips_duplicate_urls(self) -> None:
+        """Batch import skips URLs that already exist as bookmarks."""
+        with TemporaryDirectory() as tmp:
+            vault_dir, bookmarks_dir = _setup_vault(tmp)
+            url_file = Path(tmp) / "urls.txt"
+            url_file.write_text(
+                "https://example.com/intro-ml\n"
+                "https://example.com/new-page\n",
+                encoding="utf-8",
+            )
+            env = {
+                "VAULT_PATH": str(vault_dir),
+                "BOOKMARKS_DIR": str(bookmarks_dir),
+            }
+            with (
+                patch.dict(os.environ, env, clear=True),
+                patch(
+                    "sys.argv",
+                    ["bookmark", "--file", str(url_file)],
+                ),
+                patch("bookmark_tools.fetch.urllib.request.urlopen", side_effect=lambda req, **kw: _fake_urlopen(req, **kw)),
+                patch("bookmark_tools.summarize.shutil.which", return_value=None),
+            ):
+                exit_code = main()
+
+            # Should succeed (not all failed)
+            self.assertEqual(exit_code, 0)
 
 
 if __name__ == "__main__":
