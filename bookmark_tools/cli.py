@@ -1,0 +1,290 @@
+from __future__ import annotations
+
+import argparse
+import re
+import urllib.error
+from pathlib import Path
+
+from .classify import (
+    ALLOWED_BOOKMARK_TYPES,
+    DEFAULT_BOOKMARK_TYPE,
+    SimilarNote,
+    call_llm,
+    derive_parent_topic,
+    derive_related_topics,
+    derive_tags,
+    enrich_tags_from_similar,
+    find_existing_url,
+    heuristic_classification,
+    rank_similar_notes,
+    validate_folder,
+)
+from .fetch import extract_page_data
+from .paths import get_bookmarks_dir, load_env
+from .render import infer_summary, render_note, slugify_filename, uniquify_path
+from .summarize import generate_summary
+from .types import BookmarkMetadata, NormalizedBookmarkMetadata, PageData
+from .vault_profile import BookmarkProfile, collect_existing_notes
+
+MAX_RELATED_ITEMS = 6
+DEFAULT_LANGUAGE = "en"
+DEFAULT_PARENT_TOPIC = "Bookmarks"
+RELATED_TOPIC_PATTERN = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
+
+
+def _folder_leaf_topic(folder: str) -> str:
+    """Return the leaf topic for a folder path."""
+    return folder.split("/")[-1] if folder else DEFAULT_PARENT_TOPIC
+
+
+def _normalize_text(value: object, fallback: str) -> str:
+    """Return a trimmed string or fallback when empty."""
+    if value is None:
+        return fallback
+    text = str(value).strip()
+    return text or fallback
+
+
+def _normalize_text_list(
+    values: object, *, lower: bool = False, limit: int | None = None
+) -> list[str]:
+    """Normalize arbitrary list-like values into filtered strings."""
+    if not isinstance(values, list):
+        return []
+    items: list[str] = []
+    for item in values:
+        text = str(item).strip()
+        if not text:
+            continue
+        items.append(text.lower() if lower else text)
+        if limit is not None and len(items) >= limit:
+            break
+    return items
+
+
+def _normalize_related_topics(values: object, *, limit: int | None = None) -> list[str]:
+    """Normalize related topics to lowercase single-word tags."""
+    raw_items = _normalize_text_list(values, lower=True)
+    items: list[str] = []
+    for raw_item in raw_items:
+        leaf = re.split(r"[\\/]", raw_item)[-1].strip()
+        candidate = re.sub(r"\s+", "-", leaf)
+        candidate = re.sub(r"-{2,}", "-", candidate).strip("-")
+        if not candidate or not RELATED_TOPIC_PATTERN.fullmatch(candidate):
+            continue
+        if candidate not in items:
+            items.append(candidate)
+        if limit is not None and len(items) >= limit:
+            break
+    return items
+
+
+def _normalize_bookmark_type(value: object) -> str:
+    """Normalize bookmark type to a supported value."""
+    bookmark_type = _normalize_text(value, DEFAULT_BOOKMARK_TYPE).lower()
+    return (
+        bookmark_type
+        if bookmark_type in ALLOWED_BOOKMARK_TYPES
+        else DEFAULT_BOOKMARK_TYPE
+    )
+
+
+def _resolve_tags(
+    metadata: BookmarkMetadata,
+    page_data: PageData,
+    folder: str,
+    similar_notes: list[SimilarNote],
+    used_llm_classification: bool,
+) -> list[str]:
+    """Resolve tags using LLM metadata first, then heuristic fallbacks."""
+    tags_from_metadata = _normalize_text_list(metadata.get("tags"), lower=True)
+    if used_llm_classification:
+        return tags_from_metadata or [_folder_leaf_topic(folder).lower()]
+    base_tags = tags_from_metadata or derive_tags(
+        page_data["title"], page_data["description"], folder
+    )
+    return enrich_tags_from_similar(base_tags, similar_notes)
+
+
+def _resolve_related(
+    metadata: BookmarkMetadata,
+    folder: str,
+    tags: list[str],
+    used_llm_classification: bool,
+) -> list[str]:
+    """Resolve related topics using metadata first, then a single fallback source."""
+    related_from_metadata = _normalize_related_topics(
+        metadata.get("related"),
+        limit=MAX_RELATED_ITEMS,
+    )
+    if related_from_metadata:
+        return related_from_metadata
+
+    related_candidates = (
+        tags
+        if used_llm_classification
+        else derive_related_topics(folder, tags)
+    )
+    return _normalize_related_topics(
+        related_candidates,
+        limit=MAX_RELATED_ITEMS,
+    )
+
+
+def _resolve_parent_topic(
+    metadata: BookmarkMetadata,
+    folder: str,
+    profile: BookmarkProfile,
+    similar_notes: list[SimilarNote],
+    used_llm_classification: bool,
+) -> str:
+    """Resolve parent topic using LLM metadata first, then fallbacks."""
+    default_parent_topic = (
+        _folder_leaf_topic(folder)
+        if used_llm_classification
+        else derive_parent_topic(folder, profile, similar_notes)
+    )
+    return _normalize_text(
+        metadata.get("parent_topic", default_parent_topic), default_parent_topic
+    )
+
+
+def normalize_metadata(
+    metadata: BookmarkMetadata,
+    page_data: PageData,
+    folder: str,
+    profile: BookmarkProfile,
+    similar_notes: list[SimilarNote],
+    used_llm_classification: bool,
+    summary_override: str | None = None,
+) -> NormalizedBookmarkMetadata:
+    """Normalize and complete classifier metadata before rendering a note."""
+    title = _normalize_text(metadata.get("title", page_data["title"]), page_data["title"])
+    tags = _resolve_tags(
+        metadata,
+        page_data,
+        folder,
+        similar_notes,
+        used_llm_classification,
+    )
+    related = _resolve_related(metadata, folder, tags, used_llm_classification)
+    parent_topic = _resolve_parent_topic(
+        metadata,
+        folder,
+        profile,
+        similar_notes,
+        used_llm_classification,
+    )
+    summary_fallback = summary_override or infer_summary(
+        page_data["description"], page_data["content"]
+    )
+    return {
+        "folder": folder,
+        "title": title,
+        "type": _normalize_bookmark_type(metadata.get("type")),
+        "tags": tags,
+        "language": _normalize_text(
+            metadata.get("language", page_data["language"]),
+            DEFAULT_LANGUAGE,
+        ),
+        "related": related,
+        "parent_topic": parent_topic,
+        "description": _normalize_text(
+            metadata.get("description", page_data["description"] or title),
+            page_data["description"] or title,
+        ),
+        "summary": _normalize_text(summary_fallback, summary_fallback)
+        if summary_override
+        else _normalize_text(metadata.get("summary", summary_fallback), summary_fallback),
+        "visibility": _normalize_text(
+            metadata.get("visibility", profile.default_visibility),
+            profile.default_visibility,
+        ),
+    }
+
+
+def build_note(url: str, allow_new_subfolder: bool) -> tuple[Path, str, str]:
+    """Build the target note path, rendered note text, and folder decision message."""
+    profile = collect_existing_notes()
+    existing = find_existing_url(url, profile)
+    if existing:
+        raise SystemExit(f"Bookmark already exists: {existing}")
+    page_data = extract_page_data(url)
+    similar_notes = rank_similar_notes(page_data, profile)
+    llm_metadata = call_llm(page_data, profile, similar_notes, allow_new_subfolder)
+    metadata = llm_metadata or heuristic_classification(
+        page_data, profile, similar_notes
+    )
+    classification_summary = (
+        str(llm_metadata.get("summary", "")).strip() if llm_metadata else ""
+    )
+    summary_override = generate_summary(
+        page_data["url"],
+        page_data,
+        classification_summary=classification_summary,
+    )
+    folder, folder_message = validate_folder(
+        str(metadata.get("folder", "Development")), allow_new_subfolder
+    )
+    metadata = normalize_metadata(
+        metadata,
+        page_data,
+        folder,
+        profile,
+        similar_notes,
+        used_llm_classification=llm_metadata is not None,
+        summary_override=summary_override,
+    )
+    bookmarks_dir = get_bookmarks_dir()
+    target_path = uniquify_path(
+        (bookmarks_dir / folder) / slugify_filename(str(metadata["title"]))
+    )
+    return target_path, render_note(metadata, page_data["url"], profile), folder_message
+
+
+def parse_args() -> argparse.Namespace:
+    """Parse CLI arguments for bookmark creation."""
+    parser = argparse.ArgumentParser(
+        description="Add a bookmark note to the Obsidian vault."
+    )
+    parser.add_argument("url", help="URL to fetch and classify")
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Print the proposed note instead of writing it",
+    )
+    parser.add_argument(
+        "--disallow-new-subfolder",
+        action="store_true",
+        help="Force placement into existing folders only",
+    )
+    return parser.parse_args()
+
+
+def main() -> int:
+    """Run the bookmark creation workflow and write output unless dry-run is set."""
+    load_env()
+    args = parse_args()
+    target_path, note_text, folder_message = build_note(
+        args.url, not args.disallow_new_subfolder
+    )
+    if args.dry_run:
+        print(f"Target: {target_path}")
+        if folder_message:
+            print(f"Folder decision: {folder_message}")
+        print()
+        print(note_text)
+        return 0
+    target_path.parent.mkdir(parents=True, exist_ok=True)
+    target_path.write_text(note_text, encoding="utf-8")
+    print(f"Created {target_path}")
+    if folder_message:
+        print(folder_message)
+    return 0
+
+
+if __name__ == "__main__":
+    try:
+        raise SystemExit(main())
+    except urllib.error.URLError as exc:
+        raise SystemExit(f"Failed to fetch URL: {exc}") from exc
