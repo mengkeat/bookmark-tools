@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import http.client
 import logging
 import urllib.error
 import urllib.request
@@ -30,7 +31,7 @@ def check_url(url: str, *, timeout: int = DEFAULT_CHECK_TIMEOUT) -> tuple[int, s
             return response.status, "OK"
     except urllib.error.HTTPError as exc:
         return exc.code, exc.reason
-    except (urllib.error.URLError, TimeoutError, OSError) as exc:
+    except (urllib.error.URLError, TimeoutError, OSError, http.client.InvalidURL) as exc:
         reason = str(getattr(exc, "reason", exc))
         return 0, reason
 
