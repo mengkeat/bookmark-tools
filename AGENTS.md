@@ -6,7 +6,7 @@ This file contains detailed guidance for coding agents working in this repositor
 
 ## Context Specification Document
 
-*Generated: 2026-03-29 | Updated: 2026-03-31 — summarize CLI integration, summary fallback chain, dry-run docs refresh, progressive-disclosure notes*
+*Generated: 2026-03-29 | Updated: 2026-04-04 — bookmark-check CLI, batch import (--file), logging module, html.parser, HTTP retry, integration tests*
 
 ---
 
@@ -56,10 +56,12 @@ Classification is LLM-first (with heuristic fallback), and summary generation is
 - Python 3.12 (stdlib only — no third-party packages required at runtime)
 - [uv](https://docs.astral.sh/uv/) for project and dependency management
 - `urllib.request` for HTTP fetching (page content + LLM API)
+- `html.parser` for robust HTML metadata extraction (title, meta tags, lang attribute)
 - `subprocess` + `shutil.which` for optional `summarize` CLI invocation
-- `re` + `html` for HTML parsing (no BeautifulSoup/lxml)
+- `re` + `html` for HTML cleaning (no BeautifulSoup/lxml)
 - `json` for LLM request/response serialization
 - `dataclasses` + `typing.TypedDict` for data models
+- `logging` for structured diagnostic output across all modules
 - Optional: any OpenAI-compatible chat completions API (`gpt-4.1-mini` default model; OpenAI/OpenRouter compatible config)
 - Optional: external `summarize` CLI (`summarize --help`) for primary summary generation
 
@@ -100,8 +102,11 @@ Invokes `src/bookmark_tools/__main__.py` → calls `cli.main()`.
 | Argument | Required | Default | Description |
 |----------|----------|---------|-------------|
 | `<URL>` | Yes | — | Web page URL to fetch and classify |
+| `--file`, `-f` | No | None | Read URLs from a file (one per line); use `-` for stdin |
 | `--dry-run` | No | False | Print target path + rendered note and exit; **does not write files** |
 | `--disallow-new-subfolder` | No | False | Restrict classifier output to existing folders only |
+| `--verbose`, `-v` | No | False | Enable verbose (debug) logging output |
+| `--quiet`, `-q` | No | False | Suppress all logging output except errors |
 
 #### Bookmark search entry point
 ```
@@ -125,6 +130,18 @@ Uses the `bookmark-search` script entry point defined in `pyproject.toml`, which
 ```
 uv run python -m bookmark_tools.search <QUERY> [--folder <FOLDER>] [--limit <N>]
 ```
+
+#### Bookmark health check entry point
+```
+uv run bookmark-check [--timeout <N>] [--verbose] [--quiet]
+```
+Uses the `bookmark-check` script entry point defined in `pyproject.toml`, which calls `bookmark_tools.check:main`.
+
+| Argument | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `--timeout` | No | 15 | Timeout in seconds for each URL check |
+| `--verbose`, `-v` | No | False | Enable verbose (debug) logging output |
+| `--quiet`, `-q` | No | False | Suppress all logging output except errors |
 
 #### High-level execution order
 
@@ -154,23 +171,29 @@ Start with rows marked **Mutable**. Most implementation changes should be confin
 
 | File Path | Responsibility | Key Functions/Classes | Mutability |
 |-----------|---------------|----------------------|------------|
-| `src/bookmark_tools/cli.py` | Orchestration: argument parsing, workflow coordination, summary handoff, file writing, metadata normalization | `main()`, `build_note()`, `normalize_metadata()`, `_normalize_text()`, `_normalize_text_list()`, `_normalize_related_topics()`, `parse_args()` | **Mutable** (business logic) |
-| `src/bookmark_tools/fetch.py` | HTTP page fetching and HTML content extraction | `fetch_text(url) → (final_url, html_text)`, `extract_page_data(url) → PageData`, `search_meta()`, `clean_html()` | Read-Only (utility) |
-| `src/bookmark_tools/classify.py` | Classification logic: LLM-based and heuristic fallback, folder validation, similarity scoring, env config | `call_llm()`, `heuristic_classification()`, `rank_similar_notes()`, `strong_similar_notes()`, `choose_folder_from_profile()`, `derive_tags()`, `derive_related_topics()`, `derive_parent_topic()`, `enrich_tags_from_similar()`, `validate_folder()`, `find_existing_url()`, `get_llm_config()`, `related_note_count()`, `SimilarNote` | **Mutable** (core business logic) |
-| `src/bookmark_tools/summarize.py` | Summary generation pipeline with explicit fallbacks | `generate_summary()`, `summarize_with_tool()`, `summarize_with_llm()` | **Mutable** (business logic) |
+| `src/bookmark_tools/cli.py` | Orchestration: argument parsing, workflow coordination, summary handoff, file writing, metadata normalization, batch import (`--file`), logging configuration | `main()`, `build_note()`, `normalize_metadata()`, `_normalize_text()`, `_normalize_text_list()`, `_normalize_related_topics()`, `parse_args()`, `configure_logging()`, `_read_urls_from_file()`, `_process_single_url()` | **Mutable** (business logic) |
+| `src/bookmark_tools/fetch.py` | HTTP page fetching and HTML content extraction with retry support, HTML parser-based metadata extraction | `fetch_text(url) → (final_url, html_text)`, `extract_page_data(url) → PageData`, `search_meta()`, `clean_html()`, `_MetadataParser`, `_parse_metadata()` | Read-Only (utility) |
+| `src/bookmark_tools/classify.py` | Classification logic: LLM-based and heuristic fallback, folder validation, similarity scoring, env config, retry support | `call_llm()`, `heuristic_classification()`, `rank_similar_notes()`, `strong_similar_notes()`, `choose_folder_from_profile()`, `derive_tags()`, `derive_related_topics()`, `derive_parent_topic()`, `enrich_tags_from_similar()`, `validate_folder()`, `find_existing_url()`, `get_llm_config()`, `related_note_count()`, `SimilarNote` | **Mutable** (core business logic) |
+| `src/bookmark_tools/summarize.py` | Summary generation pipeline with explicit fallbacks, retry support, logging | `generate_summary()`, `summarize_with_tool()`, `summarize_with_llm()` | **Mutable** (business logic) |
+| `src/bookmark_tools/check.py` | Bookmark health checking: HEAD request URL validation, batch problem reporting | `check_url()`, `check_bookmarks()`, `parse_args()`, `main()` | **Mutable** (business logic) |
+| `src/bookmark_tools/http_retry.py` | HTTP retry with exponential backoff and full jitter for transient failures | `urlopen_with_retry()` | Read-Only (utility) |
 | `src/bookmark_tools/types.py` | Shared typed schemas for bookmark pipeline data | `PageData`, `BookmarkMetadata`, `NormalizedBookmarkMetadata` | Read-Only (types) |
 | `src/bookmark_tools/render.py` | Markdown note rendering with YAML frontmatter | `render_note(metadata, url, profile) → str`, `infer_summary()`, `slugify_filename()`, `uniquify_path()`, `yaml_scalar()`, `yaml_list()` | Read-Only (utility) |
 | `src/bookmark_tools/paths.py` | Configurable path resolution, timeout/size constants, `.env` loader | `get_bookmarks_dir()`, `get_search_index_path()`, `get_guide_path()`, `DEFAULT_TIMEOUT` (20s), `MAX_FETCH_BYTES` (1MB), `load_env()` | Read-Only (config) |
 | `src/bookmark_tools/vault_profile.py` | Vault introspection: reads existing notes, builds profile with schema/folders/examples/topics, URL index | `collect_existing_notes() → BookmarkProfile`, `parse_frontmatter()`, `read_frontmatter()`, `tokenize()`, `choose_schema()`, `list_existing_folders()`, `NoteProfile`, `BookmarkProfile` | Read-Only (data collection) |
 | `src/bookmark_tools/__init__.py` | Package re-export | `main` (re-exported from cli) | Read-Only |
 | `src/bookmark_tools/__main__.py` | Package runner | Calls `cli.main()` | Read-Only |
-| `src/bookmark_tools/search.py` | Search orchestration: CLI argument parsing, BM25/semantic/hybrid search, result formatting | `main()`, `search_bookmarks()`, `search_bookmarks_semantic()`, `search_bookmarks_hybrid()`, `_reciprocal_rank_fusion()`, `parse_args()` | **Mutable** (business logic) |
+| `src/bookmark_tools/search.py` | Search orchestration: CLI argument parsing, BM25/semantic/hybrid search, result formatting, logging | `main()`, `search_bookmarks()`, `search_bookmarks_semantic()`, `search_bookmarks_hybrid()`, `_reciprocal_rank_fusion()`, `parse_args()`, `configure_logging()` | **Mutable** (business logic) |
 | `src/bookmark_tools/search_index.py` | SQLite FTS5 index management: schema creation, BM25-weighted search, query sanitization | `rebuild_search_index()`, `update_search_index()`, `search_index()`, `SearchResult` | Read-Only (utility) |
 | `src/bookmark_tools/search_documents.py` | Document collection: reads vault notes and normalizes frontmatter + body into `SearchDocument` records | `collect_search_documents()`, `SearchDocument` | Read-Only (utility) |
-| `src/bookmark_tools/embeddings.py` | Embedding-based semantic search: OpenAI embedding API, vector storage in SQLite, cosine similarity ranking | `embed_texts()`, `build_embedding_text()`, `refresh_embeddings()`, `semantic_search()`, `EmbeddingMatch` | Read-Only (utility) |
+| `src/bookmark_tools/embeddings.py` | Embedding-based semantic search: OpenAI embedding API, vector storage in SQLite, cosine similarity ranking, retry support | `embed_texts()`, `build_embedding_text()`, `refresh_embeddings()`, `semantic_search()`, `EmbeddingMatch` | Read-Only (utility) |
 | `tests/test_bookmarks.py` | Unit tests (unittest) for helpers + summary pipeline behavior | `BookmarkHelpersTest` (14 tests) | Test file |
 | `tests/test_bookmark_search.py` | Unit tests (unittest) for search: document collection, BM25 ranking, folder filtering | `BookmarkSearchTest` | Test file |
 | `tests/test_embeddings.py` | Unit tests (unittest) for embeddings: vector helpers, semantic search, RRF, hybrid search | `EmbeddingHelpersTest`, `EmbeddingIndexTest`, `ReciprocalRankFusionTest`, `HybridSearchTest` | Test file |
+| `tests/test_integration.py` | Integration tests for full `build_note()` pipeline with mocked network | `BookmarkIntegrationTest` | Test file |
+| `tests/test_http_retry.py` | Unit tests for HTTP retry: exponential backoff, jitter, retryable codes, non-retryable errors | `HttpRetryTest` | Test file |
+| `tests/test_fetch.py` | Unit tests for fetch module: metadata parsing, HTML cleaning, page data extraction | `FetchTest` | Test file |
+| `tests/test_check.py` | Unit tests for bookmark-check: URL checking, problem detection, edge cases | `BookmarkCheckTest` | Test file |
 
 ---
 
@@ -282,10 +305,10 @@ title, url, type, tags, created, last_updated, language, related, parent_topic, 
 #### HTTP Requests (urllib.request)
 | Target | Direction | Module | Details |
 |--------|-----------|--------|---------|
-| Bookmark URL | Read | `fetch.py:fetch_text()` | GET with custom User-Agent; reads up to `MAX_FETCH_BYTES` (1 MB); timeout 20s |
-| LLM API (`/chat/completions`) | Read/Write | `classify.py:call_llm()` | POST JSON to OpenAI-compatible endpoint for folder/type/tags/related/summary metadata; Bearer token auth; timeout 20s |
-| LLM API (`/chat/completions`) | Read/Write | `summarize.py:summarize_with_llm()` | POST JSON to OpenAI-compatible endpoint for summary fallback only when summarize CLI output and classifier summary are unavailable; timeout 180s |
-| Embedding API (`/embeddings`) | Read/Write | `embeddings.py:_call_embedding_api()` | POST JSON to OpenAI-compatible endpoint; Bearer token auth; model `text-embedding-3-small` (256 dims); timeout 20s |
+| Bookmark URL | Read | `fetch.py:fetch_text()` | GET with custom User-Agent; reads up to `MAX_FETCH_BYTES` (1 MB); timeout 20s; uses `urlopen_with_retry()` for transient failure resilience |
+| LLM API (`/chat/completions`) | Read/Write | `classify.py:call_llm()` | POST JSON to OpenAI-compatible endpoint for folder/type/tags/related/summary metadata; Bearer token auth; timeout 20s; uses `urlopen_with_retry()` |
+| LLM API (`/chat/completions`) | Read/Write | `summarize.py:summarize_with_llm()` | POST JSON to OpenAI-compatible endpoint for summary fallback only when summarize CLI output and classifier summary are unavailable; timeout 180s; uses `urlopen_with_retry()` |
+| Embedding API (`/embeddings`) | Read/Write | `embeddings.py:_call_embedding_api()` | POST JSON to OpenAI-compatible endpoint; Bearer token auth; model `text-embedding-3-small` (256 dims); timeout 20s; uses `urlopen_with_retry()` |
 
 #### Local CLI Tools
 | Tool | Direction | Module | Details |
@@ -335,19 +358,23 @@ If `LLM_PROVIDER` is not `openrouter` and no base URL is set, default base URL i
 9. **YAML scalar serialization** no longer uses JSON quoting; uses plain unquoted scalars via `yaml_scalar()`.
 10. **Semantic search noise** was reduced by raising the default similarity threshold to 0.40 and adding a `--threshold` CLI flag.
 11. **Vault-coupled paths** were decoupled: all paths are now configurable via environment variables with sensible defaults based on `VAULT_PATH`.
+12. **Regex-based HTML parsing** was replaced with `html.parser.HTMLParser` for robust metadata extraction.
+13. **No retry/backoff on network calls** was resolved: all HTTP requests now use `urlopen_with_retry()` with exponential backoff and full jitter.
+14. **Print-based diagnostics** were replaced with the `logging` module; CLI now supports `--verbose`/`--quiet` flags.
+15. **Single-URL-only import** was extended with `--file`/`-f` flag for batch import from files or stdin.
+16. **No link health checking** was resolved: `bookmark-check` CLI now validates all bookmarked URLs via HEAD requests.
+17. **No integration tests** was resolved: full `build_note()` pipeline tests with mocked network are now in `tests/test_integration.py`.
 
 #### Remaining technical debt
 
 ##### High
 
-1. **HTML parsing via regex:** `fetch.py` still extracts `<title>`, `<meta>`, and `<html lang>` using regex. This remains fragile for malformed/edge-case HTML.
-2. **`validate_folder()` branch complexity:** The function still has multiple remapping branches and should gain targeted branch-by-branch tests.
+1. **`validate_folder()` branch complexity:** The function still has multiple remapping branches and should gain targeted branch-by-branch tests.
 
 ##### Medium
 
-3. **Test scope remains limited to unit helpers:** There are still no integration tests for full `build_note()` orchestration and no network-behavior tests.
-4. **No retry/backoff on network calls:** Both page fetch and LLM API still use single-shot `urlopen()` calls with timeout.
+2. **Test scope remains limited to unit helpers:** Network-behavior tests are still missing (integration tests cover mocked network only).
 
 ##### Low
 
-5. **Summary-path coupling:** Summary behavior spans `classify.py`, `summarize.py`, and `render.py` (`infer_summary()`), which increases cross-module coupling and fallback-path complexity.
+3. **Summary-path coupling:** Summary behavior spans `classify.py`, `summarize.py`, and `render.py` (`infer_summary()`), which increases cross-module coupling and fallback-path complexity.

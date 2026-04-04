@@ -5,7 +5,9 @@ CLI tools for fetching, classifying, summarizing, and searching bookmarks in an 
 ## Features
 
 - **Bookmark creation**: Fetch a web page, classify it with LLM (or heuristic fallback), generate a summary, and write a structured markdown note to your vault.
+- **Batch import**: Import multiple URLs from a file or stdin with `--file`/`-f`.
 - **Search**: BM25 keyword search, semantic vector search, or hybrid search over your bookmark notes.
+- **Link health checking**: Validate all bookmarked URLs with `bookmark-check` to find dead links.
 - **Zero runtime dependencies** beyond Python stdlib (numpy is optional for faster cosine similarity).
 
 ## Installation
@@ -47,14 +49,24 @@ cp .env.example .env
 ### Add a bookmark
 
 ```bash
+# Single URL
 uv run bookmark <URL> [--dry-run] [--disallow-new-subfolder]
+
+# Batch import from file
+uv run bookmark --file urls.txt [--dry-run]
+
+# Batch import from stdin
+cat urls.txt | uv run bookmark --file -
 ```
 
 | Argument | Description |
 |---|---|
 | `<URL>` | Web page URL to fetch and classify (required) |
+| `--file`, `-f` | Read URLs from a file (one per line); use `-` for stdin |
 | `--dry-run` | Print the proposed note without writing it to disk |
 | `--disallow-new-subfolder` | Restrict placement to existing folders only |
+| `--verbose`, `-v` | Enable verbose (debug) logging output |
+| `--quiet`, `-q` | Suppress all logging output except errors |
 
 ### Search bookmarks
 
@@ -78,6 +90,18 @@ uv run bookmark-search <QUERY> --hybrid [--threshold <FLOAT>] [--limit <N>]
 | `--semantic` | Use embedding-based semantic search |
 | `--hybrid` | Combine BM25 + semantic via Reciprocal Rank Fusion |
 | `--threshold` | Min similarity for semantic/hybrid (default: 0.40) |
+
+### Check bookmark health
+
+```bash
+uv run bookmark-check [--timeout <N>] [--verbose] [--quiet]
+```
+
+| Argument | Description |
+|---|---|
+| `--timeout` | Timeout in seconds for each URL check (default: 15) |
+| `--verbose`, `-v` | Enable verbose (debug) logging output |
+| `--quiet`, `-q` | Suppress all logging output except errors |
 
 ## How it works
 
