@@ -11,6 +11,7 @@ dependencies = [
 [project.scripts]
 bookmark = "bookmark_tools:main"
 bookmark-search = "bookmark_tools.search:main"
+bookmark-check = "bookmark_tools.check:main"
 
 [tool.uv]
 dev-dependencies = [
