@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import re
-import sys
 import urllib.error
 import urllib.request
 from collections import Counter
@@ -11,6 +11,8 @@ from collections import Counter
 from .http_retry import urlopen_with_retry
 from dataclasses import dataclass
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 from .paths import DEFAULT_TIMEOUT, get_bookmarks_dir, get_guide_path
 from .render import infer_summary
@@ -271,9 +273,9 @@ def call_llm(
         IndexError,
         TypeError,
     ) as exc:
-        print(
-            f"LLM classification failed ({exc.__class__.__name__}); falling back to heuristics.",
-            file=sys.stderr,
+        logger.warning(
+            "LLM classification failed (%s); falling back to heuristics.",
+            exc.__class__.__name__,
         )
         return None
 

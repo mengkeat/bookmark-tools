@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import argparse
+import logging
+import os
 import re
 import urllib.error
 from pathlib import Path
@@ -25,6 +27,8 @@ from .render import infer_summary, render_note, slugify_filename, uniquify_path
 from .summarize import generate_summary
 from .types import BookmarkMetadata, NormalizedBookmarkMetadata, PageData
 from .vault_profile import BookmarkProfile, collect_existing_notes
+
+logger = logging.getLogger(__name__)
 
 MAX_RELATED_ITEMS = 6
 DEFAULT_LANGUAGE = "en"
@@ -258,13 +262,39 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Force placement into existing folders only",
     )
+    parser.add_argument(
+        "--verbose", "-v",
+        action="store_true",
+        help="Enable verbose (debug) logging output",
+    )
+    parser.add_argument(
+        "--quiet", "-q",
+        action="store_true",
+        help="Suppress all logging output except errors",
+    )
     return parser.parse_args()
+
+
+def configure_logging(*, verbose: bool = False, quiet: bool = False) -> None:
+    """Configure root logging based on CLI flags and LOG_LEVEL env var."""
+    if verbose:
+        level = logging.DEBUG
+    elif quiet:
+        level = logging.ERROR
+    else:
+        env_level = os.environ.get("LOG_LEVEL", "").upper()
+        level = getattr(logging, env_level, logging.WARNING)
+    logging.basicConfig(
+        format="%(levelname)s: %(message)s",
+        level=level,
+    )
 
 
 def main() -> int:
     """Run the bookmark creation workflow and write output unless dry-run is set."""
     load_env()
     args = parse_args()
+    configure_logging(verbose=args.verbose, quiet=args.quiet)
     target_path, note_text, folder_message = build_note(
         args.url, not args.disallow_new_subfolder
     )

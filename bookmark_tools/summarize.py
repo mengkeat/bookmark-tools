@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import json
+import logging
 import shutil
 import subprocess
-import sys
 import urllib.error
 import urllib.request
+
+logger = logging.getLogger(__name__)
 
 from .classify import get_llm_config
 from .http_retry import urlopen_with_retry
@@ -50,9 +52,9 @@ def summarize_with_tool(url: str) -> str | None:
             check=False,
         )
     except (OSError, subprocess.TimeoutExpired) as exc:
-        print(
-            f"summarize tool failed ({exc.__class__.__name__}); falling back.",
-            file=sys.stderr,
+        logger.warning(
+            "summarize tool failed (%s); falling back.",
+            exc.__class__.__name__,
         )
         return None
 
@@ -67,10 +69,7 @@ def summarize_with_tool(url: str) -> str | None:
     if completed.returncode == 0 and summary:
         return summary
 
-    print(
-        "summarize tool returned no summary; falling back.",
-        file=sys.stderr,
-    )
+    logger.warning("summarize tool returned no summary; falling back.")
     return None
 
 
@@ -126,9 +125,9 @@ def summarize_with_llm(page_data: PageData) -> str | None:
         IndexError,
         TypeError,
     ) as exc:
-        print(
-            f"LLM summarization failed ({exc.__class__.__name__}); falling back.",
-            file=sys.stderr,
+        logger.warning(
+            "LLM summarization failed (%s); falling back.",
+            exc.__class__.__name__,
         )
         return None
 

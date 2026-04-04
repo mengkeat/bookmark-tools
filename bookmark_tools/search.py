@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 import argparse
+import logging
 import sys
 from pathlib import Path
 from typing import TYPE_CHECKING, Sequence
 
 if TYPE_CHECKING:
     from .embeddings import EmbeddingMatch
+
+logger = logging.getLogger(__name__)
 
 from .paths import get_bookmarks_dir, get_search_index_path, load_env
 from .search_documents import collect_search_documents
@@ -248,6 +251,16 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         default=DEFAULT_SIMILARITY_THRESHOLD,
         help=f"Minimum similarity score for semantic/hybrid results (default: {DEFAULT_SIMILARITY_THRESHOLD})",
     )
+    parser.add_argument(
+        "--verbose", "-v",
+        action="store_true",
+        help="Enable verbose (debug) logging output",
+    )
+    parser.add_argument(
+        "--quiet", "-q",
+        action="store_true",
+        help="Suppress all logging output except errors",
+    )
     return parser.parse_args(argv)
 
 
@@ -278,6 +291,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     """Run bookmark search and print ranked results."""
     load_env()
     args = parse_args(argv)
+    from .cli import configure_logging
+    configure_logging(verbose=args.verbose, quiet=args.quiet)
     try:
         if args.hybrid:
             results = search_bookmarks_hybrid(
@@ -302,7 +317,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 rebuild=args.rebuild,
             )
     except ValueError as exc:
-        print(str(exc), file=sys.stderr)
+        logger.error("%s", exc)
         return 1
     if not results:
         print("No bookmarks found.")
