@@ -12,12 +12,12 @@ from .http_retry import urlopen_with_retry
 from dataclasses import dataclass
 from pathlib import Path
 
-logger = logging.getLogger(__name__)
-
 from .paths import DEFAULT_TIMEOUT, get_bookmarks_dir, get_guide_path
 from .render import infer_summary
 from .types import BookmarkMetadata, PageData
 from .vault_profile import BookmarkProfile, parse_frontmatter, tokenize
+
+logger = logging.getLogger(__name__)
 
 TAG_STOP_WORDS = {"and", "for", "from", "into", "that", "the", "this", "with"}
 ALLOWED_BOOKMARK_TYPES = ("article", "video", "course", "tool", "paper", "book")
@@ -208,7 +208,9 @@ def call_llm(
         return None
 
     prompt = {
-        "guide": get_guide_path().read_text(encoding="utf-8") if get_guide_path().exists() else "",
+        "guide": get_guide_path().read_text(encoding="utf-8")
+        if get_guide_path().exists()
+        else "",
         "allow_new_subfolder": allow_new_subfolder,
         "existing_folders": profile.folders,
         "schema": profile.schema,
@@ -304,7 +306,9 @@ def heuristic_classification(
     }
 
 
-def related_note_count(parent_dir: Path, candidate_topic: str, bookmarks_dir: Path) -> int:
+def related_note_count(
+    parent_dir: Path, candidate_topic: str, bookmarks_dir: Path
+) -> int:
     """Count notes in a folder that are topically related to a candidate subtopic."""
     topic_tokens = [
         token.lower()
@@ -330,7 +334,9 @@ def related_note_count(parent_dir: Path, candidate_topic: str, bookmarks_dir: Pa
     return count
 
 
-def validate_folder(raw_folder: str, allow_new_subfolder: bool, bookmarks_dir: Path | None = None) -> tuple[str, str]:
+def validate_folder(
+    raw_folder: str, allow_new_subfolder: bool, bookmarks_dir: Path | None = None
+) -> tuple[str, str]:
     """Validate or adjust folder choices according to vault constraints and support."""
     if bookmarks_dir is None:
         bookmarks_dir = get_bookmarks_dir()

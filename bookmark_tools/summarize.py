@@ -7,12 +7,12 @@ import subprocess
 import urllib.error
 import urllib.request
 
-logger = logging.getLogger(__name__)
-
 from .classify import get_llm_config
 from .http_retry import urlopen_with_retry
 from .render import infer_summary
 from .types import PageData
+
+logger = logging.getLogger(__name__)
 
 SUMMARIZE_TIMEOUT_SECONDS = 180
 SUMMARY_CHAR_LIMIT = 900
@@ -115,7 +115,9 @@ def summarize_with_llm(page_data: PageData) -> str | None:
         with urlopen_with_retry(request, timeout=SUMMARIZE_TIMEOUT_SECONDS) as response:
             body = json.loads(response.read().decode("utf-8"))
         message = body["choices"][0]["message"]
-        text = _trim_summary(str(message.get("content") or message.get("reasoning") or ""))
+        text = _trim_summary(
+            str(message.get("content") or message.get("reasoning") or "")
+        )
         return text or None
     except (
         urllib.error.URLError,

@@ -2,15 +2,12 @@ from __future__ import annotations
 
 import json
 import os
-import urllib.error
-from http.server import BaseHTTPRequestHandler
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
 import unittest
 
 from bookmark_tools.cli import build_note, main, _read_urls_from_file
-from bookmark_tools.vault_profile import BookmarkProfile
 
 
 SAMPLE_HTML = """\
@@ -133,8 +130,14 @@ class IntegrationBuildNoteTest(unittest.TestCase):
             }
             with (
                 patch.dict(os.environ, env, clear=True),
-                patch("bookmark_tools.fetch.urllib.request.urlopen", side_effect=lambda req, **kw: _fake_urlopen(req, **kw)),
-                patch("bookmark_tools.classify.urllib.request.urlopen", side_effect=lambda req, **kw: _fake_urlopen(req, **kw)),
+                patch(
+                    "bookmark_tools.fetch.urllib.request.urlopen",
+                    side_effect=lambda req, **kw: _fake_urlopen(req, **kw),
+                ),
+                patch(
+                    "bookmark_tools.classify.urllib.request.urlopen",
+                    side_effect=lambda req, **kw: _fake_urlopen(req, **kw),
+                ),
                 patch("bookmark_tools.summarize.shutil.which", return_value=None),
                 patch("bookmark_tools.summarize.summarize_with_llm", return_value=None),
             ):
@@ -168,7 +171,10 @@ class IntegrationBuildNoteTest(unittest.TestCase):
             }
             with (
                 patch.dict(os.environ, env, clear=True),
-                patch("bookmark_tools.fetch.urllib.request.urlopen", side_effect=lambda req, **kw: _fake_urlopen(req, **kw)),
+                patch(
+                    "bookmark_tools.fetch.urllib.request.urlopen",
+                    side_effect=lambda req, **kw: _fake_urlopen(req, **kw),
+                ),
                 patch("bookmark_tools.summarize.shutil.which", return_value=None),
             ):
                 target_path, note_text, folder_message = build_note(
@@ -191,7 +197,10 @@ class IntegrationBuildNoteTest(unittest.TestCase):
             }
             with (
                 patch.dict(os.environ, env, clear=True),
-                patch("bookmark_tools.fetch.urllib.request.urlopen", side_effect=lambda req, **kw: _fake_urlopen(req, **kw)),
+                patch(
+                    "bookmark_tools.fetch.urllib.request.urlopen",
+                    side_effect=lambda req, **kw: _fake_urlopen(req, **kw),
+                ),
             ):
                 with self.assertRaises(SystemExit) as ctx:
                     build_note("https://example.com/intro-ml", allow_new_subfolder=True)
@@ -257,8 +266,14 @@ class IntegrationBuildNoteTest(unittest.TestCase):
             }
             with (
                 patch.dict(os.environ, env, clear=True),
-                patch("bookmark_tools.fetch.urllib.request.urlopen", side_effect=urlopen_new_folder),
-                patch("bookmark_tools.classify.urllib.request.urlopen", side_effect=urlopen_new_folder),
+                patch(
+                    "bookmark_tools.fetch.urllib.request.urlopen",
+                    side_effect=urlopen_new_folder,
+                ),
+                patch(
+                    "bookmark_tools.classify.urllib.request.urlopen",
+                    side_effect=urlopen_new_folder,
+                ),
                 patch("bookmark_tools.summarize.shutil.which", return_value=None),
                 patch("bookmark_tools.summarize.summarize_with_llm", return_value=None),
             ):
@@ -288,7 +303,10 @@ class IntegrationCLIMainTest(unittest.TestCase):
                     "sys.argv",
                     ["bookmark", "https://example.com/dry-run-test", "--dry-run"],
                 ),
-                patch("bookmark_tools.fetch.urllib.request.urlopen", side_effect=lambda req, **kw: _fake_urlopen(req, **kw)),
+                patch(
+                    "bookmark_tools.fetch.urllib.request.urlopen",
+                    side_effect=lambda req, **kw: _fake_urlopen(req, **kw),
+                ),
                 patch("bookmark_tools.summarize.shutil.which", return_value=None),
                 patch("builtins.print") as mock_print,
             ):
@@ -316,7 +334,10 @@ class IntegrationCLIMainTest(unittest.TestCase):
                     "sys.argv",
                     ["bookmark", "https://example.com/write-test"],
                 ),
-                patch("bookmark_tools.fetch.urllib.request.urlopen", side_effect=lambda req, **kw: _fake_urlopen(req, **kw)),
+                patch(
+                    "bookmark_tools.fetch.urllib.request.urlopen",
+                    side_effect=lambda req, **kw: _fake_urlopen(req, **kw),
+                ),
                 patch("bookmark_tools.summarize.shutil.which", return_value=None),
             ):
                 exit_code = main()
@@ -349,11 +370,14 @@ class BatchImportTest(unittest.TestCase):
                 encoding="utf-8",
             )
             urls = _read_urls_from_file(str(url_file))
-        self.assertEqual(urls, [
-            "https://example.com/page1",
-            "https://example.com/page2",
-            "https://example.com/page3",
-        ])
+        self.assertEqual(
+            urls,
+            [
+                "https://example.com/page1",
+                "https://example.com/page2",
+                "https://example.com/page3",
+            ],
+        )
 
     def test_batch_import_processes_multiple_urls(self) -> None:
         """--file flag processes multiple URLs from a file."""
@@ -361,8 +385,7 @@ class BatchImportTest(unittest.TestCase):
             vault_dir, bookmarks_dir = _setup_vault(tmp)
             url_file = Path(tmp) / "urls.txt"
             url_file.write_text(
-                "https://example.com/batch-page1\n"
-                "https://example.com/batch-page2\n",
+                "https://example.com/batch-page1\nhttps://example.com/batch-page2\n",
                 encoding="utf-8",
             )
             env = {
@@ -375,7 +398,10 @@ class BatchImportTest(unittest.TestCase):
                     "sys.argv",
                     ["bookmark", "--file", str(url_file), "--dry-run"],
                 ),
-                patch("bookmark_tools.fetch.urllib.request.urlopen", side_effect=lambda req, **kw: _fake_urlopen(req, **kw)),
+                patch(
+                    "bookmark_tools.fetch.urllib.request.urlopen",
+                    side_effect=lambda req, **kw: _fake_urlopen(req, **kw),
+                ),
                 patch("bookmark_tools.summarize.shutil.which", return_value=None),
             ):
                 exit_code = main()
@@ -388,8 +414,7 @@ class BatchImportTest(unittest.TestCase):
             vault_dir, bookmarks_dir = _setup_vault(tmp)
             url_file = Path(tmp) / "urls.txt"
             url_file.write_text(
-                "https://example.com/intro-ml\n"
-                "https://example.com/new-page\n",
+                "https://example.com/intro-ml\nhttps://example.com/new-page\n",
                 encoding="utf-8",
             )
             env = {
@@ -402,7 +427,10 @@ class BatchImportTest(unittest.TestCase):
                     "sys.argv",
                     ["bookmark", "--file", str(url_file)],
                 ),
-                patch("bookmark_tools.fetch.urllib.request.urlopen", side_effect=lambda req, **kw: _fake_urlopen(req, **kw)),
+                patch(
+                    "bookmark_tools.fetch.urllib.request.urlopen",
+                    side_effect=lambda req, **kw: _fake_urlopen(req, **kw),
+                ),
                 patch("bookmark_tools.summarize.shutil.which", return_value=None),
             ):
                 exit_code = main()

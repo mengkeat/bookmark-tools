@@ -31,7 +31,12 @@ def check_url(url: str, *, timeout: int = DEFAULT_CHECK_TIMEOUT) -> tuple[int, s
             return response.status, "OK"
     except urllib.error.HTTPError as exc:
         return exc.code, exc.reason
-    except (urllib.error.URLError, TimeoutError, OSError, http.client.InvalidURL) as exc:
+    except (
+        urllib.error.URLError,
+        TimeoutError,
+        OSError,
+        http.client.InvalidURL,
+    ) as exc:
         reason = str(getattr(exc, "reason", exc))
         return 0, reason
 
@@ -54,13 +59,15 @@ def check_bookmarks(
         title = str(metadata.get("title", note_path.stem))
         status, reason = check_url(url, timeout=timeout)
         if status == 0 or status >= 400:
-            problems.append({
-                "path": note_path,
-                "url": url,
-                "title": title,
-                "status": status,
-                "reason": reason,
-            })
+            problems.append(
+                {
+                    "path": note_path,
+                    "url": url,
+                    "title": title,
+                    "status": status,
+                    "reason": reason,
+                }
+            )
             logger.info("✗ %s → %s (%s)", title, status, reason)
         else:
             logger.debug("✓ %s → %s", title, status)
@@ -80,12 +87,14 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         help=f"Timeout in seconds for each URL check (default: {DEFAULT_CHECK_TIMEOUT})",
     )
     parser.add_argument(
-        "--verbose", "-v",
+        "--verbose",
+        "-v",
         action="store_true",
         help="Enable verbose logging output",
     )
     parser.add_argument(
-        "--quiet", "-q",
+        "--quiet",
+        "-q",
         action="store_true",
         help="Suppress all logging output except errors",
     )
@@ -97,6 +106,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     load_env()
     args = parse_args(argv)
     from .cli import configure_logging
+
     configure_logging(verbose=args.verbose, quiet=args.quiet)
 
     problems = check_bookmarks(timeout=args.timeout)

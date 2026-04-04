@@ -44,9 +44,7 @@ class BookmarkSearchTest(unittest.TestCase):
         )
         return note_path
 
-    def _setup_two_notes(
-        self, bookmarks_dir: Path
-    ) -> tuple[Path, Path]:
+    def _setup_two_notes(self, bookmarks_dir: Path) -> tuple[Path, Path]:
         """Create the standard python-sqlite and sqlite-overview test notes."""
         note_a = self._write_note(
             bookmarks_dir,

@@ -159,14 +159,14 @@ When doing batch imports, parallelize fetching and classification across URLs us
 
 | Priority | Item | Impact | Effort |
 |----------|------|--------|--------|
-| P0 | 5.1 Integration tests | High | Medium |
-| P0 | 1.1 Retry with backoff | High | Low |
-| P0 | 7.1 Incremental embeddings | High | Low |
-| P1 | 1.2 Proper HTML parsing | Medium | Low |
-| P1 | 6.2 Logging | Medium | Medium |
-| P1 | 3.1 Batch import | High | Medium |
-| P1 | 3.6 Link health checking | Medium | Low |
-| P1 | 5.5 CI pipeline | Medium | Low |
+| P0 | 5.1 Integration tests | High | Medium | ✅ Done |
+| P0 | 1.1 Retry with backoff | High | Low | ✅ Done |
+| P0 | 7.1 Incremental embeddings | High | Low | ✅ Done (already implemented) |
+| P1 | 1.2 Proper HTML parsing | Medium | Low | ✅ Done |
+| P1 | 6.2 Logging | Medium | Medium | ✅ Done |
+| P1 | 3.1 Batch import | High | Medium | ✅ Done |
+| P1 | 3.6 Link health checking | Medium | Low | ✅ Done |
+| P1 | 5.5 CI pipeline | Medium | Low | ✅ Done | ✅ Done |
 | P2 | 3.2 Bookmark update/refresh | Medium | Medium |
 | P2 | 6.1 Unified config file | Medium | Medium |
 | P2 | 2.3 Search snippets | Medium | Medium |

@@ -29,7 +29,11 @@ def _default_search_index_path() -> Path:
 def _default_guide_path() -> Path:
     """Return the default classification guide path from VAULT_PATH env var."""
     vault = Path(os.environ.get("VAULT_PATH", "")).expanduser().resolve()
-    return vault / "Meta" / "Bookmark-Classification-Guide.md" if vault.is_dir() else Path()
+    return (
+        vault / "Meta" / "Bookmark-Classification-Guide.md"
+        if vault.is_dir()
+        else Path()
+    )
 
 
 def _default_env_paths() -> list[Path]:

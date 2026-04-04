@@ -198,25 +198,25 @@ class EmbeddingIndexTest(unittest.TestCase):
             bookmarks_dir = Path(tmp) / "Bookmarks"
             db_path = Path(tmp) / "test.sqlite3"
 
-            doc_a = _make_document(
-                bookmarks_dir, "ML-AI/a.md", title="Note A"
-            )
-            doc_b = _make_document(
-                bookmarks_dir, "ML-AI/b.md", title="Note B"
-            )
+            doc_a = _make_document(bookmarks_dir, "ML-AI/a.md", title="Note A")
+            doc_b = _make_document(bookmarks_dir, "ML-AI/b.md", title="Note B")
 
             refresh_embeddings(
                 [doc_a, doc_b], database_path=db_path, config=FAKE_CONFIG
             )
             results = semantic_search(
-                "test", database_path=db_path, config=FAKE_CONFIG,
+                "test",
+                database_path=db_path,
+                config=FAKE_CONFIG,
                 threshold=0.0,
             )
             self.assertEqual(len(results), 2)
 
             refresh_embeddings([doc_a], database_path=db_path, config=FAKE_CONFIG)
             results = semantic_search(
-                "test", database_path=db_path, config=FAKE_CONFIG,
+                "test",
+                database_path=db_path,
+                config=FAKE_CONFIG,
                 threshold=0.0,
             )
             self.assertEqual(len(results), 1)
@@ -229,9 +229,7 @@ class EmbeddingIndexTest(unittest.TestCase):
             bookmarks_dir = Path(tmp) / "Bookmarks"
             db_path = Path(tmp) / "test.sqlite3"
 
-            doc_a = _make_document(
-                bookmarks_dir, "ML-AI/LLMs/gpt.md", title="GPT"
-            )
+            doc_a = _make_document(bookmarks_dir, "ML-AI/LLMs/gpt.md", title="GPT")
             doc_b = _make_document(
                 bookmarks_dir, "Development/Python/django.md", title="Django"
             )

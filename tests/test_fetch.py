@@ -80,10 +80,10 @@ class HTMLParserTest(unittest.TestCase):
     def test_first_meta_wins_for_duplicate_names(self) -> None:
         """When multiple meta tags have the same name, the first one wins."""
         html = (
-            '<html><head>'
+            "<html><head>"
             '<meta name="description" content="First">'
             '<meta name="description" content="Second">'
-            '</head></html>'
+            "</head></html>"
         )
         parser = _parse_metadata(html)
         self.assertEqual(parser.meta.get("description"), "First")

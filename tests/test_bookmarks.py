@@ -71,9 +71,13 @@ class BookmarkHelpersTest(unittest.TestCase):
 
     def test_summarize_with_tool_uses_cli_output(self) -> None:
         """It returns summarize CLI output when the tool is available."""
-        with patch("bookmark_tools.summarize.shutil.which", return_value="/usr/bin/summarize"), patch(
-            "bookmark_tools.summarize.subprocess.run"
-        ) as mocked_run:
+        with (
+            patch(
+                "bookmark_tools.summarize.shutil.which",
+                return_value="/usr/bin/summarize",
+            ),
+            patch("bookmark_tools.summarize.subprocess.run") as mocked_run,
+        ):
             mocked_run.return_value.returncode = 0
             mocked_run.return_value.stdout = "Tool generated summary."
             mocked_run.return_value.stderr = ""
@@ -91,9 +95,10 @@ class BookmarkHelpersTest(unittest.TestCase):
             "language": "en",
             "content": "Sentence one. Sentence two. Sentence three.",
         }
-        with patch("bookmark_tools.summarize.summarize_with_tool", return_value=None), patch(
-            "bookmark_tools.summarize.summarize_with_llm"
-        ) as mocked_summary_llm:
+        with (
+            patch("bookmark_tools.summarize.summarize_with_tool", return_value=None),
+            patch("bookmark_tools.summarize.summarize_with_llm") as mocked_summary_llm,
+        ):
             summary = generate_summary(
                 "https://example.com",
                 page_data,
@@ -111,8 +116,9 @@ class BookmarkHelpersTest(unittest.TestCase):
             "language": "en",
             "content": "Sentence one. Sentence two. Sentence three.",
         }
-        with patch("bookmark_tools.summarize.summarize_with_tool", return_value=None), patch(
-            "bookmark_tools.summarize.summarize_with_llm", return_value=None
+        with (
+            patch("bookmark_tools.summarize.summarize_with_tool", return_value=None),
+            patch("bookmark_tools.summarize.summarize_with_llm", return_value=None),
         ):
             summary = generate_summary("https://example.com", page_data)
         self.assertEqual(summary, "Sentence one. Sentence two.")

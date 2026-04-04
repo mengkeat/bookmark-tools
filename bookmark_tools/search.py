@@ -2,14 +2,8 @@ from __future__ import annotations
 
 import argparse
 import logging
-import sys
 from pathlib import Path
 from typing import TYPE_CHECKING, Sequence
-
-if TYPE_CHECKING:
-    from .embeddings import EmbeddingMatch
-
-logger = logging.getLogger(__name__)
 
 from .paths import get_bookmarks_dir, get_search_index_path, load_env
 from .search_documents import collect_search_documents
@@ -19,6 +13,16 @@ from .search_index import (
     search_index,
     update_search_index,
 )
+
+if TYPE_CHECKING:
+    from .embeddings import EmbeddingMatch
+
+logger = logging.getLogger(__name__)
+
+if TYPE_CHECKING:
+    from .embeddings import EmbeddingMatch
+
+logger = logging.getLogger(__name__)
 
 DEFAULT_SEARCH_LIMIT = 10
 DEFAULT_SIMILARITY_THRESHOLD = 0.40
@@ -144,11 +148,15 @@ def _reciprocal_rank_fusion(
     result_map: dict[Path, SearchResult] = {}
 
     for rank, result in enumerate(bm25_results, start=1):
-        scores[result.path] = scores.get(result.path, 0.0) + 1.0 / (RRF_RANK_CONSTANT + rank)
+        scores[result.path] = scores.get(result.path, 0.0) + 1.0 / (
+            RRF_RANK_CONSTANT + rank
+        )
         result_map.setdefault(result.path, result)
 
     for rank, result in enumerate(semantic_results, start=1):
-        scores[result.path] = scores.get(result.path, 0.0) + 1.0 / (RRF_RANK_CONSTANT + rank)
+        scores[result.path] = scores.get(result.path, 0.0) + 1.0 / (
+            RRF_RANK_CONSTANT + rank
+        )
         result_map.setdefault(result.path, result)
 
     ranked = sorted(scores.items(), key=lambda item: item[1], reverse=True)
@@ -252,12 +260,14 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         help=f"Minimum similarity score for semantic/hybrid results (default: {DEFAULT_SIMILARITY_THRESHOLD})",
     )
     parser.add_argument(
-        "--verbose", "-v",
+        "--verbose",
+        "-v",
         action="store_true",
         help="Enable verbose (debug) logging output",
     )
     parser.add_argument(
-        "--quiet", "-q",
+        "--quiet",
+        "-q",
         action="store_true",
         help="Suppress all logging output except errors",
     )
@@ -292,6 +302,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     load_env()
     args = parse_args(argv)
     from .cli import configure_logging
+
     configure_logging(verbose=args.verbose, quiet=args.quiet)
     try:
         if args.hybrid:

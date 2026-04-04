@@ -16,16 +16,16 @@ class CheckUrlTest(unittest.TestCase):
         fake_response.status = 200
         fake_response.__enter__ = lambda s: s
         fake_response.__exit__ = MagicMock(return_value=False)
-        with patch("bookmark_tools.check.urllib.request.urlopen", return_value=fake_response):
+        with patch(
+            "bookmark_tools.check.urllib.request.urlopen", return_value=fake_response
+        ):
             status, reason = check_url("https://example.com")
         self.assertEqual(status, 200)
         self.assertEqual(reason, "OK")
 
     def test_returns_404_for_not_found(self) -> None:
         """It returns (404, reason) for HTTP 404."""
-        exc = urllib.error.HTTPError(
-            "https://example.com", 404, "Not Found", {}, None
-        )
+        exc = urllib.error.HTTPError("https://example.com", 404, "Not Found", {}, None)
         with patch("bookmark_tools.check.urllib.request.urlopen", side_effect=exc):
             status, reason = check_url("https://example.com")
         self.assertEqual(status, 404)
@@ -67,7 +67,9 @@ class CheckBookmarksTest(unittest.TestCase):
                 resp.__exit__ = MagicMock(return_value=False)
                 return resp
 
-            with patch("bookmark_tools.check.urllib.request.urlopen", side_effect=fake_urlopen):
+            with patch(
+                "bookmark_tools.check.urllib.request.urlopen", side_effect=fake_urlopen
+            ):
                 problems = check_bookmarks(bookmarks_dir=Path(tmp) / "Bookmarks")
 
         self.assertEqual(len(problems), 1)
@@ -89,7 +91,10 @@ class CheckBookmarksTest(unittest.TestCase):
             fake_response.status = 200
             fake_response.__enter__ = lambda s: s
             fake_response.__exit__ = MagicMock(return_value=False)
-            with patch("bookmark_tools.check.urllib.request.urlopen", return_value=fake_response):
+            with patch(
+                "bookmark_tools.check.urllib.request.urlopen",
+                return_value=fake_response,
+            ):
                 problems = check_bookmarks(bookmarks_dir=Path(tmp) / "Bookmarks")
 
         self.assertEqual(problems, [])

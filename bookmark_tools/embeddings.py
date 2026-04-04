@@ -160,9 +160,7 @@ def _load_stored_mtimes(connection: sqlite3.Connection) -> dict[str, float]:
 def _delete_by_paths(connection: sqlite3.Connection, paths: set[str]) -> None:
     """Remove embedding rows by path."""
     for path in paths:
-        connection.execute(
-            f"DELETE FROM {EMBEDDING_TABLE} WHERE path = ?", (path,)
-        )
+        connection.execute(f"DELETE FROM {EMBEDDING_TABLE} WHERE path = ?", (path,))
 
 
 def _insert_embeddings(
@@ -266,7 +264,10 @@ def _cosine_similarities(
         return (stored_matrix @ query_array).tolist()
     except ImportError:
         return [
-            sum(query_value * stored_value for query_value, stored_value in zip(query_vector, stored_vector))
+            sum(
+                query_value * stored_value
+                for query_value, stored_value in zip(query_vector, stored_vector)
+            )
             for stored_vector in stored_vectors
         ]
 

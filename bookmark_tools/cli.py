@@ -125,9 +125,7 @@ def _resolve_related(
         return related_from_metadata
 
     related_candidates = (
-        tags
-        if used_llm_classification
-        else derive_related_topics(folder, tags)
+        tags if used_llm_classification else derive_related_topics(folder, tags)
     )
     return _normalize_related_topics(
         related_candidates,
@@ -163,7 +161,9 @@ def normalize_metadata(
     summary_override: str | None = None,
 ) -> NormalizedBookmarkMetadata:
     """Normalize and complete classifier metadata before rendering a note."""
-    title = _normalize_text(metadata.get("title", page_data["title"]), page_data["title"])
+    title = _normalize_text(
+        metadata.get("title", page_data["title"]), page_data["title"]
+    )
     tags = _resolve_tags(
         metadata,
         page_data,
@@ -199,7 +199,9 @@ def normalize_metadata(
         ),
         "summary": _normalize_text(summary_fallback, summary_fallback)
         if summary_override
-        else _normalize_text(metadata.get("summary", summary_fallback), summary_fallback),
+        else _normalize_text(
+            metadata.get("summary", summary_fallback), summary_fallback
+        ),
         "visibility": _normalize_text(
             metadata.get("visibility", profile.default_visibility),
             profile.default_visibility,
@@ -253,7 +255,8 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("url", nargs="?", help="URL to fetch and classify")
     parser.add_argument(
-        "--file", "-f",
+        "--file",
+        "-f",
         type=str,
         default=None,
         help="Read URLs from a file (one per line); use - for stdin",
@@ -269,12 +272,14 @@ def parse_args() -> argparse.Namespace:
         help="Force placement into existing folders only",
     )
     parser.add_argument(
-        "--verbose", "-v",
+        "--verbose",
+        "-v",
         action="store_true",
         help="Enable verbose (debug) logging output",
     )
     parser.add_argument(
-        "--quiet", "-q",
+        "--quiet",
+        "-q",
         action="store_true",
         help="Suppress all logging output except errors",
     )
@@ -304,12 +309,14 @@ def _read_urls_from_file(file_path: str) -> list[str]:
         lines = sys.stdin.read().splitlines()
     else:
         lines = Path(file_path).read_text(encoding="utf-8").splitlines()
-    return [line.strip() for line in lines if line.strip() and not line.strip().startswith("#")]
+    return [
+        line.strip()
+        for line in lines
+        if line.strip() and not line.strip().startswith("#")
+    ]
 
 
-def _process_single_url(
-    url: str, *, allow_new_subfolder: bool, dry_run: bool
-) -> int:
+def _process_single_url(url: str, *, allow_new_subfolder: bool, dry_run: bool) -> int:
     """Process one URL through the bookmark pipeline. Returns 0 on success, 1 on error."""
     try:
         target_path, note_text, folder_message = build_note(url, allow_new_subfolder)
@@ -317,7 +324,9 @@ def _process_single_url(
         logger.warning("%s — skipping %s", exc, url)
         return 1
     except Exception as exc:
-        logger.warning("Failed to process %s (%s: %s)", url, exc.__class__.__name__, exc)
+        logger.warning(
+            "Failed to process %s (%s: %s)", url, exc.__class__.__name__, exc
+        )
         return 1
     if dry_run:
         print(f"Target: {target_path}")
@@ -347,7 +356,9 @@ def main() -> int:
             return 1
         allow_new = not args.disallow_new_subfolder
         failures = sum(
-            _process_single_url(url, allow_new_subfolder=allow_new, dry_run=args.dry_run)
+            _process_single_url(
+                url, allow_new_subfolder=allow_new, dry_run=args.dry_run
+            )
             for url in urls
         )
         total = len(urls)
