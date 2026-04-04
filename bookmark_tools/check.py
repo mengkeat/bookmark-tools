@@ -48,7 +48,7 @@ def check_bookmarks(
     for note_path in sorted(bookmarks_dir.rglob("*.md")):
         metadata = parse_frontmatter(note_path)
         url = str(metadata.get("url", "")).strip()
-        if not url:
+        if not url or not (url.startswith("http://") or url.startswith("https://")):
             continue
         title = str(metadata.get("title", note_path.stem))
         status, reason = check_url(url, timeout=timeout)
