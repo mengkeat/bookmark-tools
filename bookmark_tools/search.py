@@ -19,11 +19,6 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-if TYPE_CHECKING:
-    from .embeddings import EmbeddingMatch
-
-logger = logging.getLogger(__name__)
-
 DEFAULT_SEARCH_LIMIT = 10
 DEFAULT_SIMILARITY_THRESHOLD = 0.40
 
