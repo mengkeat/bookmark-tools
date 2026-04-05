@@ -105,9 +105,9 @@ def serialize_search_result(r):
             "score": r.score, "snippet": r.snippet}
 ```
 
-### Phase 2: Stats & Visualization
+### Phase 2: Stats & Visualization ✅
 
-**Step 5 — Stats routes** (`web/routes/stats.py`)
+**Step 5 — Stats routes** (`web/routes/stats.py`) ✅
 
 | Method | Endpoint | Description | Wraps |
 |--------|----------|-------------|-------|

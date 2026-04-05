@@ -1,0 +1,16 @@
+<div class="stats-summary grid">
+  <article>
+    <header>Total Bookmarks</header>
+    <p class="stat-number">{{ stats.total_bookmarks }}</p>
+  </article>
+  <article>
+    <header>Total Folders</header>
+    <p class="stat-number">{{ stats.total_folders }}</p>
+  </article>
+  {% if stats.type_distribution %}
+  <article>
+    <header>Top Type</header>
+    <p class="stat-number">{{ stats.type_distribution.keys() | list | first }}</p>
+  </article>
+  {% endif %}
+</div>

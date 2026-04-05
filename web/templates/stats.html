@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% block title %}Stats — Bookmark Tools{% endblock %}
+{% block content %}
+<h2>Vault Statistics</h2>
+
+<div hx-get="/partials/stats"
+     hx-trigger="load"
+     hx-target="this">
+  <p aria-busy="true">Loading stats…</p>
+</div>
+
+<div class="charts-grid">
+  <article>
+    <header>Bookmarks per Folder</header>
+    <canvas id="chart-folders"></canvas>
+  </article>
+  <article>
+    <header>Type Distribution</header>
+    <canvas id="chart-types"></canvas>
+  </article>
+  <article>
+    <header>Top 20 Tags</header>
+    <canvas id="chart-tags"></canvas>
+  </article>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+<script>
+(async () => {
+  const resp = await fetch("/api/stats");
+  const stats = await resp.json();
+
+  // Bookmarks per folder
+  const folderData = stats.bookmarks_per_folder || {};
+  new Chart(document.getElementById("chart-folders"), {
+    type: "bar",
+    data: {
+      labels: Object.keys(folderData),
+      datasets: [{ label: "Bookmarks", data: Object.values(folderData), borderWidth: 1 }]
+    },
+    options: { responsive: true, plugins: { legend: { display: false } } }
+  });
+
+  // Type distribution
+  const typeData = stats.type_distribution || {};
+  new Chart(document.getElementById("chart-types"), {
+    type: "doughnut",
+    data: {
+      labels: Object.keys(typeData),
+      datasets: [{ data: Object.values(typeData) }]
+    },
+    options: { responsive: true }
+  });
+
+  // Top tags (horizontal bar)
+  const tagData = stats.top_tags || {};
+  new Chart(document.getElementById("chart-tags"), {
+    type: "bar",
+    data: {
+      labels: Object.keys(tagData),
+      datasets: [{ label: "Count", data: Object.values(tagData), borderWidth: 1 }]
+    },
+    options: {
+      indexAxis: "y",
+      responsive: true,
+      plugins: { legend: { display: false } }
+    }
+  });
+})();
+</script>
+{% endblock %}
