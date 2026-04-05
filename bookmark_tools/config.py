@@ -101,12 +101,8 @@ def _parse_search_section(data: dict[str, object]) -> SearchConfig:
     )
     return SearchConfig(
         bm25_weights=bm25,
-        similarity_threshold=float(
-            section.get("similarity_threshold", 0.40)
-        ),
-        embedding_model=str(
-            section.get("embedding_model", "text-embedding-3-small")
-        ),
+        similarity_threshold=float(section.get("similarity_threshold", 0.40)),
+        embedding_model=str(section.get("embedding_model", "text-embedding-3-small")),
         embedding_dimensions=int(section.get("embedding_dimensions", 256)),
         default_limit=int(section.get("default_limit", 10)),
     )

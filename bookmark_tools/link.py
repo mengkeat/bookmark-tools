@@ -4,7 +4,7 @@ import logging
 import re
 from pathlib import Path
 
-from .vault_profile import parse_list, read_frontmatter
+from .vault_profile import parse_list
 
 logger = logging.getLogger(__name__)
 
@@ -37,7 +37,9 @@ def _update_related_field(note_path: Path, new_topic: str) -> bool:
         return True
 
     existing_value = related_match.group(2).strip()
-    existing_items = parse_list(existing_value) if existing_value.startswith("[") else []
+    existing_items = (
+        parse_list(existing_value) if existing_value.startswith("[") else []
+    )
 
     normalized_existing = [item.lower().strip() for item in existing_items]
     if new_topic.lower() in normalized_existing:

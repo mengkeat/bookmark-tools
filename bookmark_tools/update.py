@@ -59,7 +59,9 @@ def update_bookmark(
     page_data = extract_page_data(url)
     similar_notes = rank_similar_notes(page_data, profile)
     llm_metadata = call_llm(page_data, profile, similar_notes, allow_new_subfolder=True)
-    metadata = llm_metadata or heuristic_classification(page_data, profile, similar_notes)
+    metadata = llm_metadata or heuristic_classification(
+        page_data, profile, similar_notes
+    )
 
     classification_summary = (
         str(llm_metadata.get("summary", "")).strip() if llm_metadata else ""
@@ -90,11 +92,15 @@ def update_bookmark(
 
     # Preserve original created date
     if old_created:
-        note_text = note_text.replace(
-            f"created: {note_text.split('created: ')[1].split(chr(10))[0]}",
-            f"created: {old_created}",
-            1,
-        ) if "created: " in note_text else note_text
+        note_text = (
+            note_text.replace(
+                f"created: {note_text.split('created: ')[1].split(chr(10))[0]}",
+                f"created: {old_created}",
+                1,
+            )
+            if "created: " in note_text
+            else note_text
+        )
 
     if not dry_run:
         note_path.write_text(note_text, encoding="utf-8")

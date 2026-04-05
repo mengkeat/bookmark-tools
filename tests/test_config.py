@@ -6,7 +6,7 @@ from tempfile import TemporaryDirectory
 from unittest.mock import patch
 import unittest
 
-from bookmark_tools.config import AppConfig, load_config, _find_config_file
+from bookmark_tools.config import load_config, _find_config_file
 
 
 SAMPLE_CONFIG = """\
@@ -115,9 +115,7 @@ class LoadConfigTest(unittest.TestCase):
         """It fills missing sections/keys with defaults."""
         with TemporaryDirectory() as tmp:
             config_path = Path(tmp) / "bookmark-tools.toml"
-            config_path.write_text(
-                "[llm]\nmodel = \"custom-model\"\n", encoding="utf-8"
-            )
+            config_path.write_text('[llm]\nmodel = "custom-model"\n', encoding="utf-8")
             with patch.dict(
                 os.environ, {"BOOKMARK_CONFIG": str(config_path)}, clear=True
             ):

@@ -106,9 +106,7 @@ class StatsTest(unittest.TestCase):
         """It counts bookmark types."""
         with TemporaryDirectory() as tmp:
             bookmarks_dir = Path(tmp) / "Bookmarks"
-            self._write_note(
-                bookmarks_dir, "Dev/a.md", title="A", btype="article"
-            )
+            self._write_note(bookmarks_dir, "Dev/a.md", title="A", btype="article")
             self._write_note(
                 bookmarks_dir,
                 "Dev/b.md",

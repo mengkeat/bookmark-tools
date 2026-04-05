@@ -368,7 +368,11 @@ class InteractiveModeTest(unittest.TestCase):
                 patch.dict(os.environ, env, clear=True),
                 patch(
                     "sys.argv",
-                    ["bookmark", "https://example.com/interactive-test", "--interactive"],
+                    [
+                        "bookmark",
+                        "https://example.com/interactive-test",
+                        "--interactive",
+                    ],
                 ),
                 patch(
                     "bookmark_tools.fetch.urllib.request.urlopen",
@@ -395,7 +399,11 @@ class InteractiveModeTest(unittest.TestCase):
                 patch.dict(os.environ, env, clear=True),
                 patch(
                     "sys.argv",
-                    ["bookmark", "https://example.com/interactive-skip", "--interactive"],
+                    [
+                        "bookmark",
+                        "https://example.com/interactive-skip",
+                        "--interactive",
+                    ],
                 ),
                 patch(
                     "bookmark_tools.fetch.urllib.request.urlopen",
@@ -409,7 +417,9 @@ class InteractiveModeTest(unittest.TestCase):
 
             self.assertEqual(exit_code, 1)
             # Only the original note should exist
-            all_notes = [n for n in bookmarks_dir.rglob("*.md") if n.name != "intro-to-ml.md"]
+            all_notes = [
+                n for n in bookmarks_dir.rglob("*.md") if n.name != "intro-to-ml.md"
+            ]
             self.assertEqual(len(all_notes), 0)
 
     def test_interactive_accepts_on_empty_input(self) -> None:

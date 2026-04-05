@@ -30,9 +30,7 @@ def normalize_tag(tag: str, aliases: dict[str, str] | None = None) -> str:
     return aliases.get(cleaned, cleaned)
 
 
-def normalize_tags(
-    tags: list[str], aliases: dict[str, str] | None = None
-) -> list[str]:
+def normalize_tags(tags: list[str], aliases: dict[str, str] | None = None) -> list[str]:
     """Normalize and deduplicate a list of tags."""
     seen: set[str] = set()
     result: list[str] = []

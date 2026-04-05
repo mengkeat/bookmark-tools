@@ -10,7 +10,6 @@ from .classify import (
     heuristic_classification,
     rank_similar_notes,
 )
-from .fetch import extract_page_data
 from .paths import get_bookmarks_dir, load_env
 from .vault_profile import collect_existing_notes, parse_frontmatter
 
@@ -56,7 +55,9 @@ def propose_reclassifications(
         similar_notes = rank_similar_notes(page_data, profile)
 
         if use_llm:
-            result = call_llm(page_data, profile, similar_notes, allow_new_subfolder=False)
+            result = call_llm(
+                page_data, profile, similar_notes, allow_new_subfolder=False
+            )
             if result is None:
                 result = heuristic_classification(page_data, profile, similar_notes)
         else:

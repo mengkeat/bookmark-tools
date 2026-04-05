@@ -85,9 +85,7 @@ def format_stats(stats: dict[str, object]) -> str:
 
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     """Parse CLI arguments for bookmark stats."""
-    parser = argparse.ArgumentParser(
-        description="Show bookmark vault statistics."
-    )
+    parser = argparse.ArgumentParser(description="Show bookmark vault statistics.")
     parser.add_argument(
         "--verbose",
         "-v",

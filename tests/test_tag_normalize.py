@@ -6,7 +6,6 @@ from bookmark_tools.tag_normalize import (
     load_aliases,
     normalize_tag,
     normalize_tags,
-    DEFAULT_TAG_ALIASES,
 )
 
 
