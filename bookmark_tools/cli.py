@@ -209,12 +209,16 @@ def normalize_metadata(
     }
 
 
+class BookmarkExistsError(Exception):
+    """Raised when a bookmark for the given URL already exists."""
+
+
 def build_note(url: str, allow_new_subfolder: bool) -> tuple[Path, str, str]:
     """Build the target note path, rendered note text, and folder decision message."""
     profile = collect_existing_notes()
     existing = find_existing_url(url, profile)
     if existing:
-        raise SystemExit(f"Bookmark already exists: {existing}")
+        raise BookmarkExistsError(f"Bookmark already exists: {existing}")
     page_data = extract_page_data(url)
     similar_notes = rank_similar_notes(page_data, profile)
     llm_metadata = call_llm(page_data, profile, similar_notes, allow_new_subfolder)
@@ -367,7 +371,7 @@ def _process_single_url(
     """Process one URL through the bookmark pipeline. Returns 0 on success, 1 on error."""
     try:
         target_path, note_text, folder_message = build_note(url, allow_new_subfolder)
-    except SystemExit as exc:
+    except BookmarkExistsError as exc:
         logger.warning("%s — skipping %s", exc, url)
         return 1
     except Exception as exc:

@@ -13,6 +13,14 @@ from web.app import serialize_search_result
 search_bp = Blueprint("search", __name__)
 
 
+def _run_search(query: str, mode: str, folder: str | None, limit: int):
+    if mode == "semantic":
+        return search_bookmarks_semantic(query, folder=folder, limit=limit)
+    if mode == "hybrid":
+        return search_bookmarks_hybrid(query, folder=folder, limit=limit)
+    return search_bookmarks(query, folder=folder, limit=limit)
+
+
 @search_bp.route("/search")
 def search_page():
     return render_template("search.html")
@@ -28,13 +36,7 @@ def api_search():
     if not query:
         return jsonify({"results": []})
 
-    if mode == "semantic":
-        results = search_bookmarks_semantic(query, folder=folder, limit=limit)
-    elif mode == "hybrid":
-        results = search_bookmarks_hybrid(query, folder=folder, limit=limit)
-    else:
-        results = search_bookmarks(query, folder=folder, limit=limit)
-
+    results = _run_search(query, mode, folder, limit)
     return jsonify({"results": [serialize_search_result(r) for r in results]})
 
 
@@ -49,12 +51,7 @@ def partials_search():
     error = None
     if query:
         try:
-            if mode == "semantic":
-                results = search_bookmarks_semantic(query, folder=folder, limit=limit)
-            elif mode == "hybrid":
-                results = search_bookmarks_hybrid(query, folder=folder, limit=limit)
-            else:
-                results = search_bookmarks(query, folder=folder, limit=limit)
+            results = _run_search(query, mode, folder, limit)
         except Exception as exc:
             error = str(exc)
 

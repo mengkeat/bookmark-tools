@@ -6,7 +6,7 @@ from pathlib import Path
 from flask import Blueprint, Response, jsonify, render_template, request, stream_with_context
 
 from bookmark_tools.check import check_url
-from bookmark_tools.cli import build_note
+from bookmark_tools.cli import BookmarkExistsError, build_note
 from bookmark_tools.paths import get_bookmarks_dir
 from bookmark_tools.reorg import propose_reclassifications
 from bookmark_tools.update import update_bookmark
@@ -38,7 +38,7 @@ def api_create_bookmark():
             "path": str(target_path.relative_to(bookmarks_dir)),
             "folder_message": folder_message,
         }), 201
-    except SystemExit as exc:
+    except BookmarkExistsError as exc:
         return jsonify({"error": str(exc)}), 409
     except Exception as exc:
         return jsonify({"error": str(exc)}), 500

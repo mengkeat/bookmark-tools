@@ -7,6 +7,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from bookmark_tools.cli import BookmarkExistsError
 from web.app import create_app
 
 
@@ -59,7 +60,7 @@ def test_create_bookmark_success(client, tmp_path):
 
 def test_create_bookmark_duplicate(client):
     with patch("web.routes.bookmarks.build_note") as mock_build:
-        mock_build.side_effect = SystemExit("Bookmark already exists: Dev/note.md")
+        mock_build.side_effect = BookmarkExistsError("Bookmark already exists: Dev/note.md")
         resp = client.post("/api/bookmarks", json={"url": "https://example.com"})
 
     assert resp.status_code == 409

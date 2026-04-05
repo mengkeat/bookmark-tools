@@ -7,7 +7,7 @@ from tempfile import TemporaryDirectory
 from unittest.mock import patch
 import unittest
 
-from bookmark_tools.cli import build_note, main, _read_urls_from_file
+from bookmark_tools.cli import BookmarkExistsError, build_note, main, _read_urls_from_file
 
 
 SAMPLE_HTML = """\
@@ -202,7 +202,7 @@ class IntegrationBuildNoteTest(unittest.TestCase):
                     side_effect=lambda req, **kw: _fake_urlopen(req, **kw),
                 ),
             ):
-                with self.assertRaises(SystemExit) as ctx:
+                with self.assertRaises(BookmarkExistsError) as ctx:
                     build_note("https://example.com/intro-ml", allow_new_subfolder=True)
                 self.assertIn("already exists", str(ctx.exception))
 

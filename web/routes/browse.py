@@ -10,6 +10,24 @@ from bookmark_tools.vault_profile import collect_existing_notes, parse_frontmatt
 browse_bp = Blueprint("browse", __name__)
 
 
+def _bookmark_dict(resolved: Path, bookmarks_dir: Path) -> dict:
+    """Build a bookmark detail dict from a resolved note path."""
+    metadata = parse_frontmatter(resolved)
+    rel = resolved.relative_to(bookmarks_dir)
+    return {
+        "path": str(rel),
+        "title": str(metadata.get("title", resolved.stem)),
+        "url": str(metadata.get("url", "")),
+        "folder": str(rel.parent) if str(rel.parent) != "." else "",
+        "tags": metadata.get("tags", []) if isinstance(metadata.get("tags"), list) else [],
+        "description": str(metadata.get("description", "")),
+        "type": str(metadata.get("type", "")),
+        "created": str(metadata.get("created", "")),
+        "related": metadata.get("related", []) if isinstance(metadata.get("related"), list) else [],
+        "parent_topic": str(metadata.get("parent_topic", "")),
+    }
+
+
 def _safe_note_path(note_path_str: str) -> Path:
     """Resolve a note path and verify it is under the bookmarks directory."""
     bookmarks_dir = get_bookmarks_dir()
@@ -45,6 +63,12 @@ def api_bookmarks():
     start = (page - 1) * per_page
     page_notes = notes[start : start + per_page]
 
+    path_lookup: dict[tuple[str, str], str] = {}
+    for p in bookmarks_dir.rglob("*.md"):
+        rel = p.relative_to(bookmarks_dir)
+        folder_key = "" if str(rel.parent) == "." else str(rel.parent)
+        path_lookup[(folder_key, p.stem)] = str(rel)
+
     return jsonify({
         "folder": folder,
         "page": page,
@@ -56,17 +80,7 @@ def api_bookmarks():
                 "folder": n.folder,
                 "tags": n.tags,
                 "description": n.description,
-                "path": str(
-                    next(
-                        (
-                            p
-                            for p in bookmarks_dir.rglob("*.md")
-                            if p.parent == bookmarks_dir / n.folder
-                            and p.stem == n.title
-                        ),
-                        "",
-                    )
-                ),
+                "path": path_lookup.get((n.folder, n.title), ""),
             }
             for n in page_notes
         ],
@@ -76,21 +90,7 @@ def api_bookmarks():
 @browse_bp.route("/api/bookmarks/<path:note_path>")
 def api_bookmark_detail(note_path: str):
     resolved = _safe_note_path(note_path)
-    metadata = parse_frontmatter(resolved)
-    bookmarks_dir = get_bookmarks_dir()
-    rel = resolved.relative_to(bookmarks_dir)
-    return jsonify({
-        "path": str(rel),
-        "title": str(metadata.get("title", resolved.stem)),
-        "url": str(metadata.get("url", "")),
-        "folder": str(rel.parent) if str(rel.parent) != "." else "",
-        "tags": metadata.get("tags", []),
-        "description": str(metadata.get("description", "")),
-        "type": str(metadata.get("type", "")),
-        "created": str(metadata.get("created", "")),
-        "related": metadata.get("related", []),
-        "parent_topic": str(metadata.get("parent_topic", "")),
-    })
+    return jsonify(_bookmark_dict(resolved, get_bookmarks_dir()))
 
 
 @browse_bp.route("/partials/folders")
@@ -131,19 +131,5 @@ def partials_bookmarks():
 @browse_bp.route("/partials/bookmark-detail/<path:note_path>")
 def partials_bookmark_detail(note_path: str):
     resolved = _safe_note_path(note_path)
-    metadata = parse_frontmatter(resolved)
-    bookmarks_dir = get_bookmarks_dir()
-    rel = resolved.relative_to(bookmarks_dir)
-    detail = {
-        "path": str(rel),
-        "title": str(metadata.get("title", resolved.stem)),
-        "url": str(metadata.get("url", "")),
-        "folder": str(rel.parent) if str(rel.parent) != "." else "",
-        "tags": metadata.get("tags", []) if isinstance(metadata.get("tags"), list) else [],
-        "description": str(metadata.get("description", "")),
-        "type": str(metadata.get("type", "")),
-        "created": str(metadata.get("created", "")),
-        "related": metadata.get("related", []) if isinstance(metadata.get("related"), list) else [],
-        "parent_topic": str(metadata.get("parent_topic", "")),
-    }
+    detail = _bookmark_dict(resolved, get_bookmarks_dir())
     return render_template("partials/bookmark_detail.html", bookmark=detail)

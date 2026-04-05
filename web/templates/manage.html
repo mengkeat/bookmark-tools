@@ -44,24 +44,21 @@
 </section>
 
 <script>
-// ── helpers ──────────────────────────────────────────────────────────────────
 function setStatus(el, msg, ok) {
   el.textContent = msg;
   el.style.color = ok ? "var(--pico-color)" : "var(--pico-del-color, red)";
 }
 
-// ── create ───────────────────────────────────────────────────────────────────
-document.getElementById("create-form").addEventListener("submit", async e => {
-  e.preventDefault();
-  const url = document.getElementById("create-url").value.trim();
-  const btn = document.getElementById("create-btn");
-  const out = document.getElementById("create-result");
+async function submitForm(formId, endpoint, method, inputId, resultId, btnId, loadingMsg, successMsg) {
+  const url = document.getElementById(inputId).value.trim();
+  const btn = document.getElementById(btnId);
+  const out = document.getElementById(resultId);
   btn.disabled = true;
   btn.setAttribute("aria-busy", "true");
-  out.textContent = "Creating…";
+  out.textContent = loadingMsg;
   try {
-    const resp = await fetch("/api/bookmarks", {
-      method: "POST",
+    const resp = await fetch(endpoint, {
+      method,
       headers: {"Content-Type": "application/json"},
       body: JSON.stringify({url}),
     });
@@ -69,8 +66,8 @@ document.getElementById("create-form").addEventListener("submit", async e => {
     if (!resp.ok) {
       setStatus(out, "Error: " + (data.error || resp.statusText), false);
     } else {
-      setStatus(out, `Created: ${data.path}  (${data.folder_message})`, true);
-      document.getElementById("create-url").value = "";
+      setStatus(out, successMsg(data), true);
+      if (method === "POST") document.getElementById(inputId).value = "";
     }
   } catch (err) {
     setStatus(out, "Error: " + err, false);
@@ -78,35 +75,18 @@ document.getElementById("create-form").addEventListener("submit", async e => {
     btn.disabled = false;
     btn.removeAttribute("aria-busy");
   }
+}
+
+document.getElementById("create-form").addEventListener("submit", e => {
+  e.preventDefault();
+  submitForm("create-form", "/api/bookmarks", "POST", "create-url", "create-result", "create-btn",
+    "Creating…", d => `Created: ${d.path}  (${d.folder_message})`);
 });
 
-// ── update ───────────────────────────────────────────────────────────────────
-document.getElementById("update-form").addEventListener("submit", async e => {
+document.getElementById("update-form").addEventListener("submit", e => {
   e.preventDefault();
-  const url = document.getElementById("update-url").value.trim();
-  const btn = document.getElementById("update-btn");
-  const out = document.getElementById("update-result");
-  btn.disabled = true;
-  btn.setAttribute("aria-busy", "true");
-  out.textContent = "Updating…";
-  try {
-    const resp = await fetch("/api/bookmarks/update", {
-      method: "PUT",
-      headers: {"Content-Type": "application/json"},
-      body: JSON.stringify({url}),
-    });
-    const data = await resp.json();
-    if (!resp.ok) {
-      setStatus(out, "Error: " + (data.error || resp.statusText), false);
-    } else {
-      setStatus(out, `Updated: ${data.path}`, true);
-    }
-  } catch (err) {
-    setStatus(out, "Error: " + err, false);
-  } finally {
-    btn.disabled = false;
-    btn.removeAttribute("aria-busy");
-  }
+  submitForm("update-form", "/api/bookmarks/update", "PUT", "update-url", "update-result", "update-btn",
+    "Updating…", d => `Updated: ${d.path}`);
 });
 
 // ── link checker (SSE) ───────────────────────────────────────────────────────
