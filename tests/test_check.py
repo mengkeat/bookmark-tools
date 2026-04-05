@@ -88,6 +88,34 @@ class CheckUrlTest(unittest.TestCase):
 
         self.assertEqual(status, 403)
 
+    def test_returns_zero_for_timeout(self) -> None:
+        """It returns (0, ...) when the request times out."""
+        with patch(
+            "bookmark_tools.check.urllib.request.urlopen", side_effect=TimeoutError("timed out")
+        ):
+            status, reason = check_url("https://example.com")
+        self.assertEqual(status, 0)
+        self.assertIn("timed out", reason)
+
+    def test_returns_zero_for_ssl_error(self) -> None:
+        """It returns (0, ...) for SSL/certificate errors (reported as URLError)."""
+        import ssl
+        ssl_exc = urllib.error.URLError(ssl.SSLCertVerificationError("cert verify failed"))
+        with patch(
+            "bookmark_tools.check.urllib.request.urlopen", side_effect=ssl_exc
+        ):
+            status, reason = check_url("https://example.com")
+        self.assertEqual(status, 0)
+
+    def test_returns_500_for_server_error(self) -> None:
+        """It returns (500, reason) for HTTP 500 Internal Server Error."""
+        exc = urllib.error.HTTPError(
+            "https://example.com", 500, "Internal Server Error", {}, None
+        )
+        with patch("bookmark_tools.check.urllib.request.urlopen", side_effect=exc):
+            status, reason = check_url("https://example.com")
+        self.assertEqual(status, 500)
+
 
 class CheckBookmarksTest(unittest.TestCase):
     def test_reports_broken_links(self) -> None:

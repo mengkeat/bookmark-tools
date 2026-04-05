@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import unittest
+from unittest.mock import patch
 
 from bookmark_tools.fetch import _parse_metadata, search_meta, clean_html
 
@@ -87,6 +88,71 @@ class HTMLParserTest(unittest.TestCase):
         )
         parser = _parse_metadata(html)
         self.assertEqual(parser.meta.get("description"), "First")
+
+
+class FetchNetworkErrorTest(unittest.TestCase):
+    """Tests for network failure handling in fetch_text / extract_page_data."""
+
+    def _fake_response(self, body: bytes, url: str = "https://example.com"):
+        class FakeHeaders:
+            def get_content_charset(self):
+                return "utf-8"
+
+        class FakeResponse:
+            def __init__(self):
+                self.headers = FakeHeaders()
+                self._body = body
+                self._url = url
+
+            def read(self, n=-1):
+                return self._body if n == -1 else self._body[:n]
+
+            def geturl(self):
+                return self._url
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                pass
+
+        return FakeResponse()
+
+    def test_fetch_raises_on_404(self) -> None:
+        """fetch_text propagates HTTP 404 errors (not retried)."""
+        import urllib.error
+        from bookmark_tools.fetch import fetch_text
+
+        exc = urllib.error.HTTPError("https://example.com", 404, "Not Found", {}, None)
+        with patch("bookmark_tools.http_retry.urllib.request.urlopen", side_effect=exc):
+            with self.assertRaises(urllib.error.HTTPError) as ctx:
+                fetch_text("https://example.com")
+        self.assertEqual(ctx.exception.code, 404)
+
+    def test_fetch_raises_on_connection_error(self) -> None:
+        """fetch_text propagates URLError after retries are exhausted."""
+        import urllib.error
+        from bookmark_tools.fetch import fetch_text
+
+        exc = urllib.error.URLError("Connection refused")
+        with patch(
+            "bookmark_tools.http_retry.urllib.request.urlopen",
+            side_effect=exc,
+        ):
+            with patch("bookmark_tools.http_retry.time.sleep"):
+                with self.assertRaises(urllib.error.URLError):
+                    fetch_text("https://example.com")
+
+    def test_extract_page_data_uses_final_url_after_redirect(self) -> None:
+        """extract_page_data captures the redirected URL."""
+        from bookmark_tools.fetch import extract_page_data
+
+        html = b"<html><head><title>Redirected Page</title></head><body></body></html>"
+        fake = self._fake_response(html, url="https://redirected.example.com/final")
+        with patch("bookmark_tools.http_retry.urllib.request.urlopen", return_value=fake):
+            page = extract_page_data("https://example.com/original")
+        self.assertEqual(page["url"], "https://redirected.example.com/final")
+        self.assertEqual(page["title"], "Redirected Page")
 
 
 if __name__ == "__main__":
