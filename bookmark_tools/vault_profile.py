@@ -60,6 +60,9 @@ class NoteProfile:
     tags: list[str]
     parent_topic: str
     tokens: set[str]
+    url: str
+    type: str
+    path: Path
 
 
 @dataclass(frozen=True)
@@ -190,6 +193,7 @@ def collect_existing_notes(
             else []
         )
         parent_topic = str(metadata.get("parent_topic", ""))
+        note_type = str(metadata.get("type", "")).strip().lower()
         if folder and len(folder_examples[folder]) < 3:
             folder_examples[folder].append(title)
         if parent_topic:
@@ -205,6 +209,9 @@ def collect_existing_notes(
                 tokens=tokenize(
                     " ".join([folder, title, description, " ".join(tags), parent_topic])
                 ),
+                url=existing_url,
+                type=note_type,
+                path=note_path,
             )
         )
 

@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Sequence
 
 from .paths import get_bookmarks_dir, load_env
-from .vault_profile import collect_existing_notes, parse_frontmatter
+from .vault_profile import collect_existing_notes
 
 logger = logging.getLogger(__name__)
 
@@ -29,12 +29,8 @@ def collect_stats(bookmarks_dir: Path | None = None) -> dict[str, object]:
             tag_counts[tag.lower()] += 1
         if note.parent_topic:
             parent_topic_counts[note.parent_topic] += 1
-
-    for note_path in sorted(bookmarks_dir.rglob("*.md")):
-        metadata = parse_frontmatter(note_path)
-        btype = str(metadata.get("type", "")).strip().lower()
-        if btype:
-            type_counts[btype] += 1
+        if note.type:
+            type_counts[note.type] += 1
 
     return {
         "total_bookmarks": len(profile.notes),

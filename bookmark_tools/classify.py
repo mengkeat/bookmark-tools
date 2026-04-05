@@ -208,10 +208,12 @@ def call_llm(
     if not config:
         return None
 
+    try:
+        guide_text = get_guide_path().read_text(encoding="utf-8")
+    except OSError:
+        guide_text = ""
     prompt = {
-        "guide": get_guide_path().read_text(encoding="utf-8")
-        if get_guide_path().exists()
-        else "",
+        "guide": guide_text,
         "allow_new_subfolder": allow_new_subfolder,
         "existing_folders": profile.folders,
         "schema": profile.schema,
@@ -332,6 +334,8 @@ def related_note_count(
         )
         if any(token in title_tokens for token in topic_tokens):
             count += 1
+            if count >= 2:
+                return count
     return count
 
 
@@ -352,8 +356,9 @@ def validate_folder(
 
     parts = normalized.split("/")
     top_level = bookmarks_dir / parts[0]
-    if not allow_new_subfolder or not top_level.exists() or len(parts) < 2:
-        fallback = parts[0] if top_level.exists() else "Development"
+    top_level_exists = top_level.exists()
+    if not allow_new_subfolder or not top_level_exists or len(parts) < 2:
+        fallback = parts[0] if top_level_exists else "Development"
         return (
             fallback,
             f"Rejected new folder `{normalized}`; used `{fallback}` instead.",

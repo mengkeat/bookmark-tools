@@ -12,7 +12,7 @@ from .classify import (
     rank_similar_notes,
 )
 from .paths import get_bookmarks_dir, load_env
-from .vault_profile import collect_existing_notes, parse_frontmatter
+from .vault_profile import collect_existing_notes
 
 logger = logging.getLogger(__name__)
 
@@ -34,23 +34,17 @@ def propose_reclassifications(
     profile = collect_existing_notes(bookmarks_dir=bookmarks_dir)
     proposals: list[dict[str, str]] = []
 
-    for note_path in sorted(bookmarks_dir.rglob("*.md")):
-        metadata = parse_frontmatter(note_path)
-        url = str(metadata.get("url", "")).strip()
-        title = str(metadata.get("title", note_path.stem))
-        current_folder = str(note_path.relative_to(bookmarks_dir).parent)
-        if current_folder == ".":
-            current_folder = ""
-
+    for note in profile.notes:
+        url = note.url
         if not url or not (url.startswith("http://") or url.startswith("https://")):
             continue
 
         page_data = {
             "url": url,
-            "title": title,
-            "description": str(metadata.get("description", "")),
-            "language": str(metadata.get("language", "en")),
-            "content": title,
+            "title": note.title,
+            "description": note.description,
+            "language": "en",
+            "content": note.title,
         }
 
         similar_notes = rank_similar_notes(page_data, profile)
@@ -64,14 +58,14 @@ def propose_reclassifications(
         else:
             result = heuristic_classification(page_data, profile, similar_notes)
 
-        proposed_folder = str(result.get("folder", current_folder))
+        proposed_folder = str(result.get("folder", note.folder))
 
-        if proposed_folder != current_folder:
+        if proposed_folder != note.folder:
             proposals.append(
                 {
-                    "path": str(note_path),
-                    "title": title,
-                    "current_folder": current_folder or "(root)",
+                    "path": str(note.path),
+                    "title": note.title,
+                    "current_folder": note.folder or "(root)",
                     "proposed_folder": proposed_folder or "(root)",
                 }
             )
