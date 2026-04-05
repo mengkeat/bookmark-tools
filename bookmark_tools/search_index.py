@@ -14,6 +14,12 @@ BM25_WEIGHTS = (0.0, 0.0, 8.0, 3.0, 4.0, 4.0, 3.0, 2.0, 1.0)
 QUERY_TERM_PATTERN = re.compile(r"[A-Za-z0-9+#-]{2,}")
 
 
+SNIPPET_MAX_TOKENS = 10
+SNIPPET_MARKER_START = "»"
+SNIPPET_MARKER_END = "«"
+SNIPPET_ELLIPSIS = "…"
+
+
 @dataclass(frozen=True)
 class SearchResult:
     path: Path
@@ -22,6 +28,7 @@ class SearchResult:
     folder: str
     description: str
     score: float
+    snippet: str = ""
 
 
 def _connect(database_path: Path | None = None) -> sqlite3.Connection:
@@ -206,9 +213,16 @@ def search_index(
 
     parameters.append(limit)
     bm25_weight_sql = ", ".join(str(weight) for weight in BM25_WEIGHTS)
+    # FTS5 snippet() on body column (index 8) for context excerpts
+    snippet_sql = (
+        f"snippet({SEARCH_TABLE}, 8, "
+        f"'{SNIPPET_MARKER_START}', '{SNIPPET_MARKER_END}', "
+        f"'{SNIPPET_ELLIPSIS}', {SNIPPET_MAX_TOKENS})"
+    )
     sql = f"""
         SELECT path, url, title, folder, description,
-               -bm25({SEARCH_TABLE}, {bm25_weight_sql}) AS score
+               -bm25({SEARCH_TABLE}, {bm25_weight_sql}) AS score,
+               {snippet_sql} AS snippet
         FROM {SEARCH_TABLE}
         WHERE {" AND ".join(where_clauses)}
         ORDER BY score DESC, title ASC
@@ -229,6 +243,7 @@ def search_index(
             folder=str(row["folder"]),
             description=str(row["description"]),
             score=float(row["score"]),
+            snippet=str(row["snippet"] or ""),
         )
         for row in rows
     ]

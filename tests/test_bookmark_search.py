@@ -224,6 +224,32 @@ class BookmarkSearchTest(unittest.TestCase):
             self.assertEqual(len(results), 1)
             self.assertEqual(results[0].title, "Pythonic Tips")
 
+    def test_search_results_include_snippets(self) -> None:
+        """Search results include a context snippet from the matching body text."""
+        with TemporaryDirectory() as tmp:
+            bookmarks_dir = Path(tmp) / "Bookmarks"
+            database_path = Path(tmp) / "bookmark-search.sqlite3"
+            self._write_note(
+                bookmarks_dir,
+                "Development/Python/python-sqlite.md",
+                url="https://example.com/python-sqlite",
+                title="Python SQLite Guide",
+                tags=["python", "sqlite"],
+                related=["database"],
+                parent_topic="Python",
+                description="Guide to sqlite search from python",
+                body="Summary: Build an FTS5 bookmark search tool with sqlite.",
+            )
+
+            results = search_bookmarks(
+                "FTS5",
+                bookmarks_dir=bookmarks_dir,
+                database_path=database_path,
+            )
+
+        self.assertEqual(len(results), 1)
+        self.assertIn("FTS5", results[0].snippet)
+
     def test_stemming_matches_word_variants(self) -> None:
         """Porter stemming matches inflected forms of words."""
         with TemporaryDirectory() as tmp:

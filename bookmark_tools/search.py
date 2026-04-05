@@ -294,6 +294,8 @@ def _print_result(position: int, result: SearchResult) -> None:
     print(f"   Path: {result.path}")
     if result.description:
         print(f"   Description: {_format_description(result.description)}")
+    if result.snippet:
+        print(f"   Snippet: {result.snippet}")
     print()
 
 
