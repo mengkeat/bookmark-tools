@@ -12,6 +12,7 @@ dependencies = [
 bookmark = "bookmark_tools:main"
 bookmark-search = "bookmark_tools.search:main"
 bookmark-check = "bookmark_tools.check:main"
+bookmark-stats = "bookmark_tools.stats:main"
 
 [tool.uv]
 dev-dependencies = [

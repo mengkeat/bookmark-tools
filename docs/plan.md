@@ -170,7 +170,7 @@ When doing batch imports, parallelize fetching and classification across URLs us
 | P2 | 3.2 Bookmark update/refresh | Medium | Medium |
 | P2 | 6.1 Unified config file | Medium | Medium |
 | P2 | 2.3 Search snippets | Medium | Medium |
-| P2 | 4.4 Stats command | Low | Low |
+| P2 | 4.4 Stats command | Low | Low | ✅ Done |
 | P3 | 3.3 Interactive mode | Low | Low |
 | P3 | 3.5 Archive content | Medium | Medium |
 | P3 | 4.1 Tag normalization | Low | Medium |
