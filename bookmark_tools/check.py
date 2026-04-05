@@ -130,7 +130,7 @@ def tag_broken(
             continue
 
         # Avoid double-tagging
-        if "broken" in text[:text.find("---", 1)]:
+        if "broken" in text[: text.find("---", 1)]:
             continue
 
         # Inject "broken" into an existing tags list, or add a tags line

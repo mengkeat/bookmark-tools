@@ -149,7 +149,9 @@ class FetchNetworkErrorTest(unittest.TestCase):
 
         html = b"<html><head><title>Redirected Page</title></head><body></body></html>"
         fake = self._fake_response(html, url="https://redirected.example.com/final")
-        with patch("bookmark_tools.http_retry.urllib.request.urlopen", return_value=fake):
+        with patch(
+            "bookmark_tools.http_retry.urllib.request.urlopen", return_value=fake
+        ):
             page = extract_page_data("https://example.com/original")
         self.assertEqual(page["url"], "https://redirected.example.com/final")
         self.assertEqual(page["title"], "Redirected Page")

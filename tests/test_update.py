@@ -198,7 +198,8 @@ class SingleVaultScanTest(unittest.TestCase):
                 patch(
                     "bookmark_tools.update.collect_existing_notes",
                     wraps=__import__(
-                        "bookmark_tools.vault_profile", fromlist=["collect_existing_notes"]
+                        "bookmark_tools.vault_profile",
+                        fromlist=["collect_existing_notes"],
                     ).collect_existing_notes,
                 ) as mock_collect,
             ):

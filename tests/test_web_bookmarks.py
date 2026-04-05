@@ -1,9 +1,9 @@
 """Tests for the web bookmarks routes (Phase 3)."""
+
 from __future__ import annotations
 
 import json
-from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -26,6 +26,7 @@ def client(tmp_path):
 
 # ── /manage page ──────────────────────────────────────────────────────────────
 
+
 def test_manage_page_returns_200(client):
     resp = client.get("/manage")
     assert resp.status_code == 200
@@ -33,6 +34,7 @@ def test_manage_page_returns_200(client):
 
 
 # ── POST /api/bookmarks ───────────────────────────────────────────────────────
+
 
 def test_create_bookmark_missing_url(client):
     resp = client.post("/api/bookmarks", json={})
@@ -45,8 +47,10 @@ def test_create_bookmark_success(client, tmp_path):
     note_dir.mkdir(parents=True)
     note_path = note_dir / "my-note.md"
 
-    with patch("web.routes.bookmarks.build_note") as mock_build, \
-         patch("web.routes.bookmarks.get_bookmarks_dir") as mock_dir:
+    with (
+        patch("web.routes.bookmarks.build_note") as mock_build,
+        patch("web.routes.bookmarks.get_bookmarks_dir") as mock_dir,
+    ):
         mock_dir.return_value = tmp_path / "Bookmarks"
         mock_build.return_value = (note_path, "# content", "placed in Dev")
 
@@ -60,7 +64,9 @@ def test_create_bookmark_success(client, tmp_path):
 
 def test_create_bookmark_duplicate(client):
     with patch("web.routes.bookmarks.build_note") as mock_build:
-        mock_build.side_effect = BookmarkExistsError("Bookmark already exists: Dev/note.md")
+        mock_build.side_effect = BookmarkExistsError(
+            "Bookmark already exists: Dev/note.md"
+        )
         resp = client.post("/api/bookmarks", json={"url": "https://example.com"})
 
     assert resp.status_code == 409
@@ -77,6 +83,7 @@ def test_create_bookmark_server_error(client):
 
 
 # ── PUT /api/bookmarks/update ─────────────────────────────────────────────────
+
 
 def test_update_bookmark_missing_url(client):
     resp = client.put("/api/bookmarks/update", json={})
@@ -95,8 +102,10 @@ def test_update_bookmark_success(client, tmp_path):
     note_path.parent.mkdir(parents=True)
     note_path.write_text("# note", encoding="utf-8")
 
-    with patch("web.routes.bookmarks.update_bookmark") as mock_upd, \
-         patch("web.routes.bookmarks.get_bookmarks_dir") as mock_dir:
+    with (
+        patch("web.routes.bookmarks.update_bookmark") as mock_upd,
+        patch("web.routes.bookmarks.get_bookmarks_dir") as mock_dir,
+    ):
         mock_dir.return_value = tmp_path / "Bookmarks"
         mock_upd.return_value = (note_path, "# updated content")
 
@@ -108,6 +117,7 @@ def test_update_bookmark_success(client, tmp_path):
 
 
 # ── POST /api/check (SSE) ─────────────────────────────────────────────────────
+
 
 def _parse_sse(raw: bytes) -> list[dict]:
     events = []
@@ -141,8 +151,10 @@ def test_check_streams_broken_link(client, tmp_path):
         encoding="utf-8",
     )
 
-    with patch("web.routes.bookmarks.get_bookmarks_dir", return_value=bookmarks_dir), \
-         patch("web.routes.bookmarks.check_url", return_value=(0, "connection refused")):
+    with (
+        patch("web.routes.bookmarks.get_bookmarks_dir", return_value=bookmarks_dir),
+        patch("web.routes.bookmarks.check_url", return_value=(0, "connection refused")),
+    ):
         resp = client.post("/api/check", json={})
 
     events = _parse_sse(resp.data)
@@ -161,8 +173,10 @@ def test_check_streams_healthy_link(client, tmp_path):
         encoding="utf-8",
     )
 
-    with patch("web.routes.bookmarks.get_bookmarks_dir", return_value=bookmarks_dir), \
-         patch("web.routes.bookmarks.check_url", return_value=(200, "OK")):
+    with (
+        patch("web.routes.bookmarks.get_bookmarks_dir", return_value=bookmarks_dir),
+        patch("web.routes.bookmarks.check_url", return_value=(200, "OK")),
+    ):
         resp = client.post("/api/check", json={})
 
     events = _parse_sse(resp.data)
@@ -186,11 +200,19 @@ def test_check_skips_notes_without_url(client, tmp_path):
 
 # ── GET /api/reorg ────────────────────────────────────────────────────────────
 
+
 def test_reorg_returns_proposals(client):
     proposals = [
-        {"path": "/v/Dev/note.md", "title": "Note", "current_folder": "Dev", "proposed_folder": "ML"}
+        {
+            "path": "/v/Dev/note.md",
+            "title": "Note",
+            "current_folder": "Dev",
+            "proposed_folder": "ML",
+        }
     ]
-    with patch("web.routes.bookmarks.propose_reclassifications", return_value=proposals):
+    with patch(
+        "web.routes.bookmarks.propose_reclassifications", return_value=proposals
+    ):
         resp = client.get("/api/reorg")
 
     assert resp.status_code == 200
@@ -209,6 +231,8 @@ def test_reorg_empty(client):
 
 
 def test_reorg_passes_llm_flag(client):
-    with patch("web.routes.bookmarks.propose_reclassifications", return_value=[]) as mock_reorg:
+    with patch(
+        "web.routes.bookmarks.propose_reclassifications", return_value=[]
+    ) as mock_reorg:
         client.get("/api/reorg?llm=true")
     mock_reorg.assert_called_once_with(use_llm=True)

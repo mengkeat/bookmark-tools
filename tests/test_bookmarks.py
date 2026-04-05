@@ -342,6 +342,7 @@ class ValidateFolderTest(unittest.TestCase):
 
     def setUp(self) -> None:
         from bookmark_tools.classify import validate_folder
+
         self.validate_folder = validate_folder
 
     # --- Invalid path branches ---
@@ -356,14 +357,18 @@ class ValidateFolderTest(unittest.TestCase):
     def test_dotdot_in_path_is_rejected(self) -> None:
         """A path containing '..' is rejected as invalid."""
         with TemporaryDirectory() as tmp:
-            folder, msg = self.validate_folder("../outside", False, bookmarks_dir=Path(tmp))
+            folder, msg = self.validate_folder(
+                "../outside", False, bookmarks_dir=Path(tmp)
+            )
         self.assertEqual(folder, "Development")
         self.assertIn("Invalid", msg)
 
     def test_path_starting_with_dot_is_rejected(self) -> None:
         """A path that starts with '.' is rejected as invalid."""
         with TemporaryDirectory() as tmp:
-            folder, msg = self.validate_folder(".hidden", False, bookmarks_dir=Path(tmp))
+            folder, msg = self.validate_folder(
+                ".hidden", False, bookmarks_dir=Path(tmp)
+            )
         self.assertEqual(folder, "Development")
         self.assertIn("Invalid", msg)
 
@@ -373,7 +378,9 @@ class ValidateFolderTest(unittest.TestCase):
         """An already-existing folder is accepted without modification."""
         with TemporaryDirectory() as tmp:
             (Path(tmp) / "Development").mkdir()
-            folder, msg = self.validate_folder("Development", False, bookmarks_dir=Path(tmp))
+            folder, msg = self.validate_folder(
+                "Development", False, bookmarks_dir=Path(tmp)
+            )
         self.assertEqual(folder, "Development")
         self.assertEqual(msg, "")
 

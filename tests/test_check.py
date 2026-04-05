@@ -91,7 +91,8 @@ class CheckUrlTest(unittest.TestCase):
     def test_returns_zero_for_timeout(self) -> None:
         """It returns (0, ...) when the request times out."""
         with patch(
-            "bookmark_tools.check.urllib.request.urlopen", side_effect=TimeoutError("timed out")
+            "bookmark_tools.check.urllib.request.urlopen",
+            side_effect=TimeoutError("timed out"),
         ):
             status, reason = check_url("https://example.com")
         self.assertEqual(status, 0)
@@ -100,10 +101,11 @@ class CheckUrlTest(unittest.TestCase):
     def test_returns_zero_for_ssl_error(self) -> None:
         """It returns (0, ...) for SSL/certificate errors (reported as URLError)."""
         import ssl
-        ssl_exc = urllib.error.URLError(ssl.SSLCertVerificationError("cert verify failed"))
-        with patch(
-            "bookmark_tools.check.urllib.request.urlopen", side_effect=ssl_exc
-        ):
+
+        ssl_exc = urllib.error.URLError(
+            ssl.SSLCertVerificationError("cert verify failed")
+        )
+        with patch("bookmark_tools.check.urllib.request.urlopen", side_effect=ssl_exc):
             status, reason = check_url("https://example.com")
         self.assertEqual(status, 0)
 
@@ -180,7 +182,13 @@ class CheckBookmarksTest(unittest.TestCase):
 
 class DeleteBrokenTest(unittest.TestCase):
     def _make_problem(self, path: Path) -> dict:
-        return {"path": path, "url": "https://example.com", "title": "Test", "status": 404, "reason": "Not Found"}
+        return {
+            "path": path,
+            "url": "https://example.com",
+            "title": "Test",
+            "status": 404,
+            "reason": "Not Found",
+        }
 
     def test_deletes_broken_file(self) -> None:
         """It deletes broken bookmark files."""
@@ -210,13 +218,21 @@ class DeleteBrokenTest(unittest.TestCase):
 
 class TagBrokenTest(unittest.TestCase):
     def _make_problem(self, path: Path) -> dict:
-        return {"path": path, "url": "https://example.com", "title": "Test", "status": 404, "reason": "Not Found"}
+        return {
+            "path": path,
+            "url": "https://example.com",
+            "title": "Test",
+            "status": 404,
+            "reason": "Not Found",
+        }
 
     def test_adds_broken_tag_to_existing_tags_list(self) -> None:
         """It appends 'broken' to an existing tags list."""
         with TemporaryDirectory() as tmp:
             note = Path(tmp) / "note.md"
-            note.write_text("---\ntags: [python]\nurl: https://example.com\n---\n", encoding="utf-8")
+            note.write_text(
+                "---\ntags: [python]\nurl: https://example.com\n---\n", encoding="utf-8"
+            )
             tagged = tag_broken([self._make_problem(note)])
             self.assertEqual(tagged, 1)
             content = note.read_text()
@@ -235,7 +251,9 @@ class TagBrokenTest(unittest.TestCase):
         """It skips notes that already have the broken tag."""
         with TemporaryDirectory() as tmp:
             note = Path(tmp) / "note.md"
-            note.write_text("---\ntags: [broken]\nurl: https://example.com\n---\n", encoding="utf-8")
+            note.write_text(
+                "---\ntags: [broken]\nurl: https://example.com\n---\n", encoding="utf-8"
+            )
             tagged = tag_broken([self._make_problem(note)])
             self.assertEqual(tagged, 0)
 

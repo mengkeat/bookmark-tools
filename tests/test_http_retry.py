@@ -116,9 +116,7 @@ class HttpRetryTest(unittest.TestCase):
     def test_retries_on_timeout_error(self, mock_sleep: MagicMock) -> None:
         """It retries on TimeoutError and succeeds on the next attempt."""
         fake_response = MagicMock()
-        mock_urlopen = MagicMock(
-            side_effect=[TimeoutError("timed out"), fake_response]
-        )
+        mock_urlopen = MagicMock(side_effect=[TimeoutError("timed out"), fake_response])
         with patch("bookmark_tools.http_retry.urllib.request.urlopen", mock_urlopen):
             result = urlopen_with_retry(
                 urllib.request.Request("https://example.com"),
@@ -150,6 +148,7 @@ class HttpRetryTest(unittest.TestCase):
     def test_ssl_error_is_retried(self, mock_sleep: MagicMock) -> None:
         """It retries on SSL errors (reported as URLError wrapping SSLError)."""
         import ssl
+
         fake_response = MagicMock()
         ssl_exc = urllib.error.URLError(ssl.SSLError("SSL handshake failed"))
         mock_urlopen = MagicMock(side_effect=[ssl_exc, fake_response])

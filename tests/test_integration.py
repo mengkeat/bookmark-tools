@@ -7,7 +7,12 @@ from tempfile import TemporaryDirectory
 from unittest.mock import patch
 import unittest
 
-from bookmark_tools.cli import BookmarkExistsError, build_note, main, _read_urls_from_file
+from bookmark_tools.cli import (
+    BookmarkExistsError,
+    build_note,
+    main,
+    _read_urls_from_file,
+)
 
 
 SAMPLE_HTML = """\

@@ -1,11 +1,10 @@
 from __future__ import annotations
 
-import re
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from bookmark_tools.render import render_note, slugify_filename, yaml_scalar, yaml_list
+from bookmark_tools.render import render_note
 from bookmark_tools.vault_profile import collect_existing_notes
 
 

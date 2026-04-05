@@ -1,9 +1,8 @@
 """Tests for the web stats routes (Phase 2)."""
+
 from __future__ import annotations
 
 import json
-from pathlib import Path
-from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
 import pytest
@@ -57,8 +56,13 @@ def test_api_stats_keys_present(client):
     with patch("web.routes.stats.collect_stats", return_value=SAMPLE_STATS):
         resp = client.get("/api/stats")
     data = json.loads(resp.data)
-    for key in ("total_bookmarks", "total_folders", "bookmarks_per_folder",
-                "top_tags", "type_distribution"):
+    for key in (
+        "total_bookmarks",
+        "total_folders",
+        "bookmarks_per_folder",
+        "top_tags",
+        "type_distribution",
+    ):
         assert key in data, f"Missing key: {key}"
 
 
@@ -67,8 +71,8 @@ def test_partials_stats_returns_html(client):
         resp = client.get("/partials/stats")
     assert resp.status_code == 200
     html = resp.data.decode()
-    assert "5" in html   # total_bookmarks
-    assert "2" in html   # total_folders
+    assert "5" in html  # total_bookmarks
+    assert "2" in html  # total_folders
 
 
 def test_partials_stats_shows_top_type(client):
