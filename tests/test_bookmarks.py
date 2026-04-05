@@ -164,7 +164,7 @@ class BookmarkHelpersTest(unittest.TestCase):
             summary_override="Summary from summarize tool.",
         )
         self.assertEqual(normalized["title"], "Example title")
-        self.assertEqual(normalized["tags"][:2], ["python", "ai"])
+        self.assertEqual(normalized["tags"][:2], ["python", "artificial-intelligence"])
         self.assertEqual(normalized["related"], ["docs"])
         self.assertEqual(normalized["summary"], "Summary from summarize tool.")
         self.assertEqual(normalized["visibility"], "private")

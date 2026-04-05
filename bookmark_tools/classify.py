@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .paths import DEFAULT_TIMEOUT, get_bookmarks_dir, get_guide_path
+from .tag_normalize import normalize_tags
 from .render import infer_summary
 from .types import BookmarkMetadata, PageData
 from .vault_profile import BookmarkProfile, parse_frontmatter, tokenize
@@ -121,7 +122,7 @@ def derive_tags(title: str, description: str, folder: str) -> list[str]:
     folder_hint = folder.split("/")[-1].lower()
     if folder_hint and folder_hint not in tags:
         tags.insert(0, folder_hint)
-    return tags[:INFERRED_TAG_LIMIT]
+    return normalize_tags(tags[:INFERRED_TAG_LIMIT])
 
 
 def enrich_tags_from_similar(
@@ -135,8 +136,8 @@ def enrich_tags_from_similar(
             if lowered not in tags:
                 tags.append(lowered)
             if len(tags) >= ENRICHED_TAG_LIMIT:
-                return tags
-    return tags[:ENRICHED_TAG_LIMIT]
+                return normalize_tags(tags)
+    return normalize_tags(tags[:ENRICHED_TAG_LIMIT])
 
 
 def derive_related_topics(folder: str, tags: list[str]) -> list[str]:
