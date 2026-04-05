@@ -438,6 +438,64 @@ class InteractiveModeTest(unittest.TestCase):
             self.assertEqual(exit_code, 0)
 
 
+class ArchiveContentTest(unittest.TestCase):
+    """Tests for page content archiving."""
+
+    def test_archive_saves_cleaned_content(self) -> None:
+        """--archive saves a .content.md file alongside the bookmark note."""
+        with TemporaryDirectory() as tmp:
+            vault_dir, bookmarks_dir = _setup_vault(tmp)
+            env = {
+                "VAULT_PATH": str(vault_dir),
+                "BOOKMARKS_DIR": str(bookmarks_dir),
+            }
+            with (
+                patch.dict(os.environ, env, clear=True),
+                patch(
+                    "sys.argv",
+                    ["bookmark", "https://example.com/archive-test", "--archive"],
+                ),
+                patch(
+                    "bookmark_tools.fetch.urllib.request.urlopen",
+                    side_effect=lambda req, **kw: _fake_urlopen(req, **kw),
+                ),
+                patch("bookmark_tools.summarize.shutil.which", return_value=None),
+            ):
+                exit_code = main()
+
+            self.assertEqual(exit_code, 0)
+            archive_files = list(bookmarks_dir.rglob("*.content.md"))
+            self.assertEqual(len(archive_files), 1)
+            content = archive_files[0].read_text(encoding="utf-8")
+            self.assertIn("body content", content)
+
+    def test_archive_not_created_without_flag(self) -> None:
+        """No archive file is created when --archive is not set."""
+        with TemporaryDirectory() as tmp:
+            vault_dir, bookmarks_dir = _setup_vault(tmp)
+            env = {
+                "VAULT_PATH": str(vault_dir),
+                "BOOKMARKS_DIR": str(bookmarks_dir),
+            }
+            with (
+                patch.dict(os.environ, env, clear=True),
+                patch(
+                    "sys.argv",
+                    ["bookmark", "https://example.com/no-archive-test"],
+                ),
+                patch(
+                    "bookmark_tools.fetch.urllib.request.urlopen",
+                    side_effect=lambda req, **kw: _fake_urlopen(req, **kw),
+                ),
+                patch("bookmark_tools.summarize.shutil.which", return_value=None),
+            ):
+                exit_code = main()
+
+            self.assertEqual(exit_code, 0)
+            archive_files = list(bookmarks_dir.rglob("*.content.md"))
+            self.assertEqual(len(archive_files), 0)
+
+
 class BatchImportTest(unittest.TestCase):
     """Tests for batch URL import functionality."""
 

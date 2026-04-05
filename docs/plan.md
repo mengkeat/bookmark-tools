@@ -172,7 +172,7 @@ When doing batch imports, parallelize fetching and classification across URLs us
 | P2 | 2.3 Search snippets | Medium | Medium | ✅ Done |
 | P2 | 4.4 Stats command | Low | Low | ✅ Done |
 | P3 | 3.3 Interactive mode | Low | Low | ✅ Done |
-| P3 | 3.5 Archive content | Medium | Medium |
+| P3 | 3.5 Archive content | Medium | Medium | ✅ Done |
 | P3 | 4.1 Tag normalization | Low | Medium |
 | P3 | 4.2 Folder reorg tool | Low | High |
 | P3 | 4.3 Bidirectional linking | Low | Medium |

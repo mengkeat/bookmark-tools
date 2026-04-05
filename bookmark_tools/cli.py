@@ -278,6 +278,11 @@ def parse_args() -> argparse.Namespace:
         help="Review and confirm classification before writing",
     )
     parser.add_argument(
+        "--archive",
+        action="store_true",
+        help="Save a cleaned copy of the page content alongside the bookmark note",
+    )
+    parser.add_argument(
         "--verbose",
         "-v",
         action="store_true",
@@ -344,7 +349,21 @@ def _prompt_interactive_review(
     return answer in ("", "y", "yes")
 
 
-def _process_single_url(url: str, *, allow_new_subfolder: bool, dry_run: bool, interactive: bool = False) -> int:
+def _save_archive(target_path: Path, content: str) -> Path:
+    """Save cleaned page content alongside the bookmark note."""
+    archive_path = target_path.with_suffix(".content.md")
+    archive_path.write_text(content, encoding="utf-8")
+    return archive_path
+
+
+def _process_single_url(
+    url: str,
+    *,
+    allow_new_subfolder: bool,
+    dry_run: bool,
+    interactive: bool = False,
+    archive: bool = False,
+) -> int:
     """Process one URL through the bookmark pipeline. Returns 0 on success, 1 on error."""
     try:
         target_path, note_text, folder_message = build_note(url, allow_new_subfolder)
@@ -372,6 +391,16 @@ def _process_single_url(url: str, *, allow_new_subfolder: bool, dry_run: bool, i
     print(f"Created {target_path}")
     if folder_message:
         print(folder_message)
+    if archive:
+        from .fetch import clean_html, fetch_text
+
+        try:
+            _, raw_html = fetch_text(url)
+            cleaned = clean_html(raw_html)
+            archive_path = _save_archive(target_path, cleaned)
+            print(f"Archived {archive_path}")
+        except Exception as exc:
+            logger.warning("Failed to archive content for %s: %s", url, exc)
     return 0
 
 
@@ -393,6 +422,7 @@ def main() -> int:
                 allow_new_subfolder=allow_new,
                 dry_run=args.dry_run,
                 interactive=args.interactive,
+                archive=args.archive,
             )
             for url in urls
         )
@@ -409,6 +439,7 @@ def main() -> int:
         allow_new_subfolder=not args.disallow_new_subfolder,
         dry_run=args.dry_run,
         interactive=args.interactive,
+        archive=args.archive,
     )
 
 
