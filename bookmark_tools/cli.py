@@ -272,6 +272,12 @@ def parse_args() -> argparse.Namespace:
         help="Force placement into existing folders only",
     )
     parser.add_argument(
+        "--interactive",
+        "-i",
+        action="store_true",
+        help="Review and confirm classification before writing",
+    )
+    parser.add_argument(
         "--verbose",
         "-v",
         action="store_true",
@@ -316,7 +322,29 @@ def _read_urls_from_file(file_path: str) -> list[str]:
     ]
 
 
-def _process_single_url(url: str, *, allow_new_subfolder: bool, dry_run: bool) -> int:
+def _prompt_interactive_review(
+    target_path: Path, note_text: str, folder_message: str
+) -> bool:
+    """Show proposed classification and prompt for confirmation.
+
+    Returns True if the user accepts, False otherwise.
+    """
+    print("─" * 60)
+    print(f"Target: {target_path}")
+    if folder_message:
+        print(f"Folder decision: {folder_message}")
+    print()
+    print(note_text)
+    print("─" * 60)
+    try:
+        answer = input("Accept this classification? [Y/n] ").strip().lower()
+    except (EOFError, KeyboardInterrupt):
+        print()
+        return False
+    return answer in ("", "y", "yes")
+
+
+def _process_single_url(url: str, *, allow_new_subfolder: bool, dry_run: bool, interactive: bool = False) -> int:
     """Process one URL through the bookmark pipeline. Returns 0 on success, 1 on error."""
     try:
         target_path, note_text, folder_message = build_note(url, allow_new_subfolder)
@@ -335,6 +363,10 @@ def _process_single_url(url: str, *, allow_new_subfolder: bool, dry_run: bool) -
         print()
         print(note_text)
         return 0
+    if interactive:
+        if not _prompt_interactive_review(target_path, note_text, folder_message):
+            print("Skipped.")
+            return 1
     target_path.parent.mkdir(parents=True, exist_ok=True)
     target_path.write_text(note_text, encoding="utf-8")
     print(f"Created {target_path}")
@@ -357,7 +389,10 @@ def main() -> int:
         allow_new = not args.disallow_new_subfolder
         failures = sum(
             _process_single_url(
-                url, allow_new_subfolder=allow_new, dry_run=args.dry_run
+                url,
+                allow_new_subfolder=allow_new,
+                dry_run=args.dry_run,
+                interactive=args.interactive,
             )
             for url in urls
         )
@@ -373,6 +408,7 @@ def main() -> int:
         args.url,
         allow_new_subfolder=not args.disallow_new_subfolder,
         dry_run=args.dry_run,
+        interactive=args.interactive,
     )
 
 

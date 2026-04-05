@@ -353,6 +353,91 @@ class IntegrationCLIMainTest(unittest.TestCase):
             self.assertIn("Summary:", content)
 
 
+class InteractiveModeTest(unittest.TestCase):
+    """Tests for interactive classification review."""
+
+    def test_interactive_accepts_on_yes(self) -> None:
+        """--interactive writes the note when user confirms with 'y'."""
+        with TemporaryDirectory() as tmp:
+            vault_dir, bookmarks_dir = _setup_vault(tmp)
+            env = {
+                "VAULT_PATH": str(vault_dir),
+                "BOOKMARKS_DIR": str(bookmarks_dir),
+            }
+            with (
+                patch.dict(os.environ, env, clear=True),
+                patch(
+                    "sys.argv",
+                    ["bookmark", "https://example.com/interactive-test", "--interactive"],
+                ),
+                patch(
+                    "bookmark_tools.fetch.urllib.request.urlopen",
+                    side_effect=lambda req, **kw: _fake_urlopen(req, **kw),
+                ),
+                patch("bookmark_tools.summarize.shutil.which", return_value=None),
+                patch("builtins.input", return_value="y"),
+            ):
+                exit_code = main()
+
+            self.assertEqual(exit_code, 0)
+            all_notes = list(bookmarks_dir.rglob("*.md"))
+            self.assertGreaterEqual(len(all_notes), 2)
+
+    def test_interactive_skips_on_no(self) -> None:
+        """--interactive skips writing when user declines."""
+        with TemporaryDirectory() as tmp:
+            vault_dir, bookmarks_dir = _setup_vault(tmp)
+            env = {
+                "VAULT_PATH": str(vault_dir),
+                "BOOKMARKS_DIR": str(bookmarks_dir),
+            }
+            with (
+                patch.dict(os.environ, env, clear=True),
+                patch(
+                    "sys.argv",
+                    ["bookmark", "https://example.com/interactive-skip", "--interactive"],
+                ),
+                patch(
+                    "bookmark_tools.fetch.urllib.request.urlopen",
+                    side_effect=lambda req, **kw: _fake_urlopen(req, **kw),
+                ),
+                patch("bookmark_tools.summarize.shutil.which", return_value=None),
+                patch("builtins.input", return_value="n"),
+                patch("builtins.print"),
+            ):
+                exit_code = main()
+
+            self.assertEqual(exit_code, 1)
+            # Only the original note should exist
+            all_notes = [n for n in bookmarks_dir.rglob("*.md") if n.name != "intro-to-ml.md"]
+            self.assertEqual(len(all_notes), 0)
+
+    def test_interactive_accepts_on_empty_input(self) -> None:
+        """--interactive defaults to accept on empty input (pressing Enter)."""
+        with TemporaryDirectory() as tmp:
+            vault_dir, bookmarks_dir = _setup_vault(tmp)
+            env = {
+                "VAULT_PATH": str(vault_dir),
+                "BOOKMARKS_DIR": str(bookmarks_dir),
+            }
+            with (
+                patch.dict(os.environ, env, clear=True),
+                patch(
+                    "sys.argv",
+                    ["bookmark", "https://example.com/enter-test", "--interactive"],
+                ),
+                patch(
+                    "bookmark_tools.fetch.urllib.request.urlopen",
+                    side_effect=lambda req, **kw: _fake_urlopen(req, **kw),
+                ),
+                patch("bookmark_tools.summarize.shutil.which", return_value=None),
+                patch("builtins.input", return_value=""),
+            ):
+                exit_code = main()
+
+            self.assertEqual(exit_code, 0)
+
+
 class BatchImportTest(unittest.TestCase):
     """Tests for batch URL import functionality."""
 
