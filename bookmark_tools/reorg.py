@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+import shutil
 from pathlib import Path
 from typing import Sequence
 
@@ -89,6 +90,16 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         help="Use LLM for classification (default: heuristic only)",
     )
     parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Print proposed moves without applying them (default behavior without --apply)",
+    )
+    parser.add_argument(
+        "--apply",
+        action="store_true",
+        help="Execute the proposed folder moves (moves files on disk)",
+    )
+    parser.add_argument(
         "--verbose",
         "-v",
         action="store_true",
@@ -123,6 +134,16 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(f"    Proposed: {entry['proposed_folder']}")
         print(f"    Path: {entry['path']}")
         print()
+
+    if args.apply and not args.dry_run:
+        moved, errors = apply_reclassifications(proposals)
+        print(f"Applied {moved} move(s).")
+        if errors:
+            for err in errors:
+                logger.error("Failed to move %s: %s", err["path"], err["error"])
+            return 1
+    else:
+        print("Run with --apply to execute these moves.")
 
     return 0
 

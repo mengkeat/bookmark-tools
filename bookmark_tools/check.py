@@ -94,6 +94,11 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         help=f"Timeout in seconds for each URL check (default: {DEFAULT_CHECK_TIMEOUT})",
     )
     parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Show what actions would be taken without making any changes",
+    )
+    parser.add_argument(
         "--verbose",
         "-v",
         action="store_true",
