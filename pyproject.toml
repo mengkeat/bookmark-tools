@@ -14,6 +14,7 @@ bookmark-search = "bookmark_tools.search:main"
 bookmark-check = "bookmark_tools.check:main"
 bookmark-stats = "bookmark_tools.stats:main"
 bookmark-update = "bookmark_tools.update:main"
+bookmark-reorg = "bookmark_tools.reorg:main"
 
 [tool.uv]
 dev-dependencies = [
