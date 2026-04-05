@@ -48,7 +48,11 @@ def uniquify_path(path: Path) -> Path:
 
 
 def render_note(
-    metadata: NormalizedBookmarkMetadata, url: str, profile: BookmarkProfile
+    metadata: NormalizedBookmarkMetadata,
+    url: str,
+    profile: BookmarkProfile,
+    *,
+    created_override: str | None = None,
 ) -> str:
     """Render bookmark metadata into note content with ordered frontmatter."""
     today = dt.date.today().isoformat()
@@ -59,7 +63,7 @@ def render_note(
         "tags": [
             str(tag).strip() for tag in metadata.get("tags", []) if str(tag).strip()
         ],
-        "created": today,
+        "created": created_override if created_override else today,
         "last_updated": today,
         "language": str(metadata.get("language", "en")).strip() or "en",
         "related": [

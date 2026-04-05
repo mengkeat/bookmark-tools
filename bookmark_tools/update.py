@@ -88,19 +88,12 @@ def update_bookmark(
         summary_override=summary_override,
     )
 
-    note_text = render_note(normalized, page_data["url"], profile)
-
-    # Preserve original created date
-    if old_created:
-        note_text = (
-            note_text.replace(
-                f"created: {note_text.split('created: ')[1].split(chr(10))[0]}",
-                f"created: {old_created}",
-                1,
-            )
-            if "created: " in note_text
-            else note_text
-        )
+    note_text = render_note(
+        normalized,
+        page_data["url"],
+        profile,
+        created_override=old_created or None,
+    )
 
     if not dry_run:
         note_path.write_text(note_text, encoding="utf-8")
