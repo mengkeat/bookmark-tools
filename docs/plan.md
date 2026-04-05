@@ -168,7 +168,7 @@ When doing batch imports, parallelize fetching and classification across URLs us
 | P1 | 3.6 Link health checking | Medium | Low | ✅ Done |
 | P1 | 5.5 CI pipeline | Medium | Low | ✅ Done | ✅ Done |
 | P2 | 3.2 Bookmark update/refresh | Medium | Medium | ✅ Done |
-| P2 | 6.1 Unified config file | Medium | Medium |
+| P2 | 6.1 Unified config file | Medium | Medium | ✅ Done |
 | P2 | 2.3 Search snippets | Medium | Medium | ✅ Done |
 | P2 | 4.4 Stats command | Low | Low | ✅ Done |
 | P3 | 3.3 Interactive mode | Low | Low |
