@@ -182,10 +182,50 @@ When you run `uv run bookmark <URL>`, the tool:
 3. Direct LLM summarization
 4. Heuristic fallback (description or first sentences)
 
+## Web interface
+
+A Flask-based web UI is included in the `web/` directory. It exposes the same functionality as the CLI through a browser interface.
+
+### Pages
+
+| Route | Description |
+|---|---|
+| `/` | Browse bookmarks by folder |
+| `/search` | Keyword, semantic, or hybrid search |
+| `/stats` | Vault statistics and charts |
+| `/manage` | Create, update, check links, and reorganize bookmarks |
+
+### Launch
+
+Install the extra dependency and run the server:
+
+```bash
+uv pip install flask
+uv run python -m web
+```
+
+The server starts on `http://localhost:5000` in debug mode.
+
+### REST API
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/api/folders` | List all folders |
+| `GET` | `/api/bookmarks?folder=&page=&per_page=` | Paginated bookmark list |
+| `GET` | `/api/bookmarks/<path>` | Bookmark detail |
+| `POST` | `/api/bookmarks` | Create bookmark (`{"url": "..."}`) |
+| `PUT` | `/api/bookmarks/update` | Re-fetch and re-classify (`{"url": "..."}`) |
+| `POST` | `/api/check` | Stream link-check progress as SSE |
+| `GET` | `/api/reorg?llm=false` | Propose folder reclassifications |
+| `GET` | `/api/search?q=&mode=keyword\|semantic\|hybrid&folder=&limit=` | Search bookmarks |
+| `POST` | `/api/search/reindex` | Rebuild the search index |
+| `GET` | `/api/stats` | Vault statistics |
+
 ## Development
 
 ```bash
-uv run pytest tests/             # Run tests
+uv run pytest tests/             # Run all tests (CLI + web)
+uv run pytest tests/test_web_stats.py tests/test_web_bookmarks.py  # Web tests only
 uv run ruff check bookmark_tools tests   # Lint
 uv run ruff format bookmark_tools tests  # Format
 ```
