@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block title %}Browse — Bookmark Tools{% endblock %}
+{% block content %}
+<h2>Browse Bookmarks</h2>
+<div class="grid-browse">
+  <aside class="sidebar"
+         hx-get="/partials/folders"
+         hx-trigger="load"
+         hx-target="this">
+    <p aria-busy="true">Loading folders…</p>
+  </aside>
+  <section id="bookmark-list">
+    <p class="muted">Select a folder to view bookmarks.</p>
+  </section>
+</div>
+{% endblock %}

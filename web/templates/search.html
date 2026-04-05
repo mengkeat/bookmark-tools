@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}Search — Bookmark Tools{% endblock %}
+{% block content %}
+<h2>Search Bookmarks</h2>
+<form hx-get="/partials/search"
+      hx-target="#search-results"
+      hx-trigger="submit, input[name='q'] changed delay:400ms">
+  <div class="grid">
+    <input type="search" name="q" placeholder="Search bookmarks…" autofocus>
+    <button type="submit">Search</button>
+  </div>
+  <fieldset>
+    <legend>Mode</legend>
+    <label>
+      <input type="radio" name="mode" value="keyword" checked>
+      Keyword
+    </label>
+    <label>
+      <input type="radio" name="mode" value="semantic">
+      Semantic
+    </label>
+    <label>
+      <input type="radio" name="mode" value="hybrid">
+      Hybrid
+    </label>
+  </fieldset>
+</form>
+
+<div id="search-results"></div>
+{% endblock %}

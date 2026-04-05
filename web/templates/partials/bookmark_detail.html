@@ -1,0 +1,9 @@
+<div class="bookmark-detail">
+  {% if bookmark.url %}
+  <p><a href="{{ bookmark.url }}" target="_blank" rel="noopener noreferrer">{{ bookmark.url }}</a></p>
+  {% endif %}
+  {% if bookmark.type %}<p class="meta">Type: {{ bookmark.type }}</p>{% endif %}
+  {% if bookmark.created %}<p class="meta">Created: {{ bookmark.created }}</p>{% endif %}
+  {% if bookmark.parent_topic %}<p class="meta">Topic: {{ bookmark.parent_topic }}</p>{% endif %}
+  {% if bookmark.related %}<p class="meta">Related: {{ bookmark.related | join(', ') }}</p>{% endif %}
+</div>

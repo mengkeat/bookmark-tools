@@ -1,0 +1,28 @@
+{% if error %}
+  <p role="alert" style="color:var(--pico-del-color)">Error: {{ error }}</p>
+{% elif not query %}
+  {# no-op: nothing typed yet #}
+{% elif results %}
+  <p>{{ results | length }} result(s) for <strong>{{ query }}</strong></p>
+  {% for r in results %}
+  <article class="search-result">
+    <h4>
+      {% if r.url %}
+      <a href="{{ r.url }}" target="_blank" rel="noopener">{{ r.title }}</a>
+      {% else %}
+      {{ r.title }}
+      {% endif %}
+      <span class="score-badge">(score: {{ "%.4f" | format(r.score) }})</span>
+    </h4>
+    <p class="meta">{{ r.folder or '(root)' }}</p>
+    {% if r.description %}
+    <p>{{ r.description }}</p>
+    {% endif %}
+    {% if r.snippet %}
+    <p class="snippet">…{{ r.snippet }}…</p>
+    {% endif %}
+  </article>
+  {% endfor %}
+{% else %}
+  <p>No results for <strong>{{ query }}</strong>.</p>
+{% endif %}

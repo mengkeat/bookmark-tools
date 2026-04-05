@@ -1,0 +1,26 @@
+<h3>{{ folder or '(root)' }} <small>({{ notes | length }} bookmarks)</small></h3>
+{% if notes %}
+  {% for note in notes %}
+  <article class="bookmark-card">
+    <div class="bookmark-header"
+         hx-get="/partials/bookmark-detail/{{ note.path }}"
+         hx-target="#detail-{{ loop.index }}"
+         hx-swap="innerHTML"
+         hx-on:htmx:before-request="var d=document.querySelector('#detail-{{ loop.index }}');if(d&&d.innerHTML.trim()){d.innerHTML='';event.preventDefault();}">
+      <h4>{{ note.title }}</h4>
+      <p class="meta">{{ note.folder or '(root)' }}</p>
+      {% if note.description %}
+      <p>{{ note.description }}</p>
+      {% endif %}
+      {% if note.tags %}
+      <div class="tags">
+        {% for tag in note.tags %}<span>{{ tag }}</span>{% endfor %}
+      </div>
+      {% endif %}
+    </div>
+    <div id="detail-{{ loop.index }}"></div>
+  </article>
+  {% endfor %}
+{% else %}
+  <p>No bookmarks in this folder.</p>
+{% endif %}

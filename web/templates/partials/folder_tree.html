@@ -1,0 +1,18 @@
+<nav>
+  <ul style="list-style:none;padding:0;margin:0;">
+    <li>
+      <span class="folder-link {% if active == '' %}active{% endif %}"
+            hx-get="/partials/bookmarks?folder="
+            hx-target="#bookmark-list"
+            hx-push-url="/?folder=">(root)</span>
+    </li>
+    {% for folder in folders %}
+    <li>
+      <span class="folder-link {% if active == folder %}active{% endif %}"
+            hx-get="/partials/bookmarks?folder={{ folder | urlencode }}"
+            hx-target="#bookmark-list"
+            hx-push-url="/?folder={{ folder | urlencode }}">{{ folder }}</span>
+    </li>
+    {% endfor %}
+  </ul>
+</nav>
