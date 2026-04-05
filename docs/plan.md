@@ -1,178 +1,198 @@
-# Feature & Improvement Plan
-
-Suggestions for making the Obsidian Bookmark Tools more feature-complete and robust, organized by priority and category.
+# Feature & Improvement Plan — Phase 2
 
 ---
 
-## 1. Reliability & Error Handling
+### 1. Code Quality & Bug Fixes (P0)
 
-### 1.1 Retry with exponential backoff for network calls
-All HTTP calls (page fetch, LLM classification, LLM summary, embedding API) are single-shot with a hard timeout. Add retry logic with exponential backoff and jitter to handle transient failures gracefully.
-- **Scope**: `fetch.py`, `classify.py`, `summarize.py`, `embeddings.py`
+#### 1.1 Fix duplicate logger and TYPE_CHECKING block in `search.py`
+- **What**: Remove the duplicate `logger = logging.getLogger(__name__)` and `if TYPE_CHECKING` block.
+- **Scope**: `search.py`
+- **Effort**: Trivial
 
-### 1.2 Proper HTML parsing
-`fetch.py` extracts `<title>`, `<meta>`, and `<html lang>` via regex. This is fragile for malformed HTML. Replace with a lightweight parser (e.g., `html.parser` from stdlib) for more reliable extraction.
-- **Scope**: `fetch.py`
+#### 1.2 Wire `config.py` into the application or remove it
+- **What**: The `AppConfig`/`load_config()` module exists but nothing uses it. Either integrate it so modules read from `AppConfig` instead of raw env vars (eliminating the parallel config path), or remove the dead code.
+- **Scope**: `config.py`, `classify.py`, `summarize.py`, `embeddings.py`, `paths.py`, `search_index.py`
+- **Effort**: Medium
 
-### 1.3 Graceful handling of rate limits
-LLM and embedding APIs return 429 responses under load. Detect rate-limit headers (`Retry-After`, `x-ratelimit-*`) and wait accordingly rather than failing immediately.
-- **Scope**: `classify.py`, `summarize.py`, `embeddings.py`
+#### 1.3 Fix fragile created-date preservation in `update.py`
+- **What**: Instead of string-replacing `created:` in rendered text, pass the original `created` date into `render_note()` (or `normalize_metadata()`) so it's rendered correctly from the start.
+- **Scope**: `update.py`, `render.py`, `types.py`
+- **Effort**: Low
 
-### 1.4 Timeout tuning and configurability
-Timeouts are hard-coded (20s fetch, 20s LLM classify, 180s LLM summary). Make these configurable via environment variables or a config file so users can adapt to slow networks or providers.
+#### 1.4 Fall back to GET on 405 in `check.py`
+- **What**: When a HEAD request returns 405 Method Not Allowed, retry with a GET request (reading minimal bytes) before marking the URL as broken.
+- **Scope**: `check.py`
+- **Effort**: Low
 
----
-
-## 2. Search Improvements
-
-### 2.1 Incremental embedding updates
-Semantic search currently recomputes all embeddings on every query (`refresh_embeddings` does a full pass). Switch to incremental embedding updates (like FTS5 already does via `bookmark_mtime`) to avoid redundant API calls and speed up queries.
-- **Scope**: `embeddings.py`
-
-### 2.2 Configurable BM25 weights
-BM25 field weights are hard-coded `[0.0, 0.0, 8.0, 3.0, 4.0, 4.0, 3.0, 2.0, 1.0]`. Allow tuning via a config file or CLI flags so users can adjust ranking to their vault's content distribution.
-- **Scope**: `search_index.py`, `search.py`
-
-### 2.3 Search result snippets with highlighted matches
-Currently search results show title/folder/description. Add context snippets around the matching text with highlighted query terms for faster scanning.
-- **Scope**: `search.py`, `search_index.py`
-
-### 2.4 Multi-language stemming support
-The porter stemmer is English-only. Support additional languages via ICU tokenizer or language-specific stemmers for vaults with multilingual content.
-- **Scope**: `search_index.py`
-
-### 2.5 Embedding model configurability
-The embedding model (`text-embedding-3-small`, 256 dims) and batch size (512) are hard-coded. Make these configurable to support different providers or higher-dimensional models.
-- **Scope**: `embeddings.py`
-
----
-
-## 3. Bookmark Creation Enhancements
-
-### 3.1 Batch bookmark import
-Support adding multiple URLs at once from a file, clipboard, or stdin (one URL per line). Useful for migrating from browser bookmark exports or Pocket/Raindrop.
-- **Scope**: `cli.py` (new `--batch` or `--file` flag)
-
-### 3.2 Bookmark update/refresh command
-Add a command to re-fetch and re-classify an existing bookmark (e.g., when a page's content has changed or classification was wrong). Preserve manual edits while updating auto-generated fields.
-- **Scope**: new CLI entry point or `--update` flag
-
-### 3.3 Interactive classification review
-Add an `--interactive` mode that shows the proposed classification (folder, tags, type, parent_topic) and lets the user confirm or override before writing the file.
-- **Scope**: `cli.py`
-
-### 3.4 Browser extension or bookmarklet integration
-Provide a simple way to trigger `bookmark <URL>` from a browser, either via a bookmarklet that calls a local HTTP endpoint or a shell protocol handler.
-- **Scope**: new module or companion script
-
-### 3.5 Archive/snapshot page content
-Optionally save a cleaned copy of the page content (or a Readability-parsed version) alongside the bookmark note, so content is preserved even if the original URL goes offline.
-- **Scope**: `fetch.py`, `cli.py` (new `--archive` flag)
-
-### 3.6 Link health checking
-Periodically check all bookmarked URLs for dead links (404, timeouts, domain changes) and flag or tag broken bookmarks.
-- **Scope**: new CLI entry point `bookmark-check`
-
----
-
-## 4. Vault Organization & Metadata
-
-### 4.1 Tag normalization and deduplication
-Enforce consistent tag casing and merge near-duplicates (e.g., `machine-learning` vs `Machine Learning` vs `ml`). Maintain a tag alias map.
-- **Scope**: `classify.py`, new config file for tag aliases
-
-### 4.2 Folder reorganization tool
-Provide a command to propose folder reclassifications for existing bookmarks based on the current classifier, useful after the classification guide evolves.
-- **Scope**: new CLI entry point `bookmark-reorg`
-
-### 4.3 Related bookmark linking
-After creating a bookmark, update the `related` field of the top-N most similar existing bookmarks to include the new one, building a bidirectional link graph.
-- **Scope**: `cli.py`, `classify.py`
-
-### 4.4 Statistics and dashboard
-Add a `bookmark-stats` command showing vault statistics: bookmarks per folder, tag distribution, most common parent topics, recent additions, broken links count, etc.
-- **Scope**: new CLI entry point
-
----
-
-## 5. Testing & Quality
-
-### 5.1 Integration tests for the full pipeline
-No tests cover the end-to-end `build_note()` flow. Add integration tests with mocked HTTP that exercise the complete bookmark creation pipeline.
-- **Scope**: `tests/`
-
-### 5.2 Branch-level coverage for `validate_folder()`
-`validate_folder()` has complex branching logic for folder remapping. Add targeted tests for each branch to catch regressions.
+#### 1.5 Add `validate_folder()` branch-level tests
+- **What**: This was called out as high-priority remaining tech debt. Add targeted tests covering every branch (invalid paths, existing folders, new subfolders with/without support, nested rejection, etc.).
 - **Scope**: `tests/test_bookmarks.py`
-
-### 5.3 Network behavior tests
-Test handling of HTTP errors (404, 500, timeouts, SSL errors, rate limits) to verify fallback behavior is correct.
-- **Scope**: `tests/`
-
-### 5.4 Property-based testing for parsers
-Use hypothesis to fuzz frontmatter parsing, URL normalization, and HTML extraction with random inputs.
-- **Scope**: `tests/`
-
-### 5.5 CI pipeline
-Set up GitHub Actions to run `ruff check`, `ruff format --check`, and `pytest` on each push/PR.
-- **Scope**: `.github/workflows/`
+- **Effort**: Low
 
 ---
 
-## 6. Developer Experience & Configuration
+### 2. Performance (P1)
 
-### 6.1 Unified configuration file
-Consolidate settings (API keys, model IDs, timeouts, BM25 weights, embedding model, thresholds) into a single YAML/TOML config file with sensible defaults, reducing reliance on scattered environment variables.
-- **Scope**: new `config.py` module, updates across all modules
+#### 2.1 Parallel batch processing with `concurrent.futures`
+- **What**: Batch import (`--file`) currently processes URLs sequentially. Use a thread pool to parallelize fetching and classification across URLs.
+- **Scope**: `cli.py`
+- **Effort**: Medium
 
-### 6.2 Logging and verbosity levels
-Replace `print()` with proper `logging` module usage. Support `--verbose` / `--quiet` flags and `LOG_LEVEL` env var for debugging and silent operation.
-- **Scope**: all modules
-
-### 6.3 Remove legacy entry point
-`Vault/Meta/add_bookmark.py` uses `sys.path` manipulation. Remove it or convert it to a thin wrapper that calls the installed `bookmark` CLI.
-- **Scope**: `Vault/Meta/add_bookmark.py`
-
-### 6.4 Shell completions
-Generate shell completions (bash, zsh, fish) for `bookmark` and `bookmark-search` commands.
-- **Scope**: `cli.py`, `search.py`
-
----
-
-## 7. Performance
-
-### 7.1 Embedding caching with incremental updates
-Store embeddings persistently (already done) but only recompute for new/modified documents, not all. This is the single biggest performance win for semantic search.
-- **Scope**: `embeddings.py`
-
-### 7.2 Lazy vault profile loading
-`collect_existing_notes()` scans the entire vault on every invocation. Cache the profile and invalidate based on directory mtime for faster repeated runs.
+#### 2.2 Lazy vault profile caching
+- **What**: `collect_existing_notes()` re-scans the entire vault directory tree on every invocation. Cache the profile in memory keyed by directory mtime, or persist a lightweight index, to speed up repeated runs (especially batch mode and search).
 - **Scope**: `vault_profile.py`
+- **Effort**: Medium
 
-### 7.3 Parallel LLM and fetch calls
-When doing batch imports, parallelize fetching and classification across URLs using `concurrent.futures`.
-- **Scope**: `cli.py` (batch mode)
+#### 2.3 Avoid double vault scan in `bookmark-update`
+- **What**: `find_note_by_url()` in `update.py` does a full vault scan via `rglob("*.md")` + `read_frontmatter()`, then `update_bookmark()` calls `collect_existing_notes()` for another full scan. Use the profile's `url_index` for the lookup instead.
+- **Scope**: `update.py`
+- **Effort**: Low
 
 ---
 
-## Priority Order (suggested)
+### 3. Search & Discovery (P1)
+
+#### 3.1 Export search results (JSON, CSV)
+- **What**: Add `--format json` and `--format csv` output options to `bookmark-search` for scripting and integration with other tools.
+- **Scope**: `search.py`
+- **Effort**: Low
+
+#### 3.2 "Open in browser" search action
+- **What**: Add an `--open` flag that opens the top search result's URL in the default browser (`webbrowser.open()`).
+- **Scope**: `search.py`
+- **Effort**: Trivial
+
+#### 3.3 Date-range search filter
+- **What**: Add `--after` and `--before` flags to filter search results by `created` date, useful for finding recent or old bookmarks.
+- **Scope**: `search.py`, `search_index.py` (add `created` as an indexed column)
+- **Effort**: Medium
+
+#### 3.4 Tag-based search filter
+- **What**: Add a `--tag` flag to restrict results to bookmarks with a specific tag, complementing the existing `--folder` filter.
+- **Scope**: `search.py`, `search_index.py`
+- **Effort**: Low
+
+---
+
+### 4. Bookmark Management (P2)
+
+#### 4.1 Delete bookmark command (`bookmark-delete`)
+- **What**: Add a command to delete a bookmark by URL or file path, removing the note file and cleaning up the search index and embedding store.
+- **Scope**: New module `delete.py`, `pyproject.toml`
+- **Effort**: Low
+
+#### 4.2 Bulk update command
+- **What**: Extend `bookmark-update` with `--all` or `--folder <FOLDER>` to re-process all (or a subset of) bookmarks, useful after changing the classification guide or LLM model.
+- **Scope**: `update.py`
+- **Effort**: Medium
+
+#### 4.3 Merge duplicate bookmarks
+- **What**: Detect bookmarks pointing to the same URL (after normalization, e.g., trailing slash, www prefix, query params) and offer to merge them.
+- **Scope**: `vault_profile.py`, new module or subcommand
+- **Effort**: Medium
+
+#### 4.4 `bookmark-check` actionable output
+- **What**: Add `--delete` flag to auto-delete or `--tag-broken` to tag broken bookmarks instead of just reporting them. Add `--format json` for scriptable output.
+- **Scope**: `check.py`
+- **Effort**: Low
+
+---
+
+### 5. Import & Export (P2)
+
+#### 5.1 Browser bookmark import (HTML format)
+- **What**: Parse Netscape bookmark HTML format (exported from Chrome, Firefox, Safari) and import all URLs. This is the standard browser export format.
+- **Scope**: New module `import_html.py`, `cli.py`
+- **Effort**: Medium
+
+#### 5.2 Export vault to browser bookmark HTML
+- **What**: Export all bookmarks as a Netscape bookmark HTML file that can be imported into any browser, preserving folder structure.
+- **Scope**: New module `export.py`, `pyproject.toml`
+- **Effort**: Medium
+
+#### 5.3 OPML import/export
+- **What**: Support OPML format for interoperability with RSS readers and other bookmark tools.
+- **Scope**: New module
+- **Effort**: Low
+
+---
+
+### 6. Reliability & Observability (P2)
+
+#### 6.1 Structured JSON logging
+- **What**: Add `--log-format json` option for machine-readable log output, useful for monitoring batch jobs or piping into log aggregation.
+- **Scope**: `cli.py`
+- **Effort**: Low
+
+#### 6.2 Dry-run for destructive commands
+- **What**: Add `--dry-run` to `bookmark-reorg`, `bookmark-check --delete`, and `bookmark-update --all` so users can preview changes before applying them.
+- **Scope**: `reorg.py`, `check.py`, `update.py`
+- **Effort**: Low
+
+#### 6.3 Network behavior tests
+- **What**: Still missing per AGENTS.md tech debt. Test handling of HTTP 404, 500, timeouts, SSL errors, and rate-limit responses with mocked network to verify fallback behavior.
+- **Scope**: `tests/`
+- **Effort**: Medium
+
+#### 6.4 Property-based testing for parsers
+- **What**: Use hypothesis to fuzz frontmatter parsing, URL normalization, `slugify_filename()`, `clean_html()`, and `_MetadataParser` with random inputs to catch edge cases.
+- **Scope**: `tests/`, `pyproject.toml` (add hypothesis dev dep)
+- **Effort**: Medium
+
+---
+
+### 7. Developer Experience (P3)
+
+#### 7.1 Shell completions
+- **What**: Generate bash/zsh/fish completions for all CLI commands, either via argcomplete or static generation.
+- **Scope**: All CLI modules
+- **Effort**: Low
+
+#### 7.2 `bookmark-reorg --apply` flag
+- **What**: Currently `bookmark-reorg` only proposes moves. Add `--apply` to actually move files and update any internal references (related fields, search index).
+- **Scope**: `reorg.py`
+- **Effort**: Medium
+
+#### 7.3 Idempotent `bookmark` command
+- **What**: When a bookmark already exists, offer `--force` to overwrite/update it instead of just erroring out. Currently duplicates exit with an error, and `bookmark-update` is a separate command.
+- **Scope**: `cli.py`
+- **Effort**: Low
+
+#### 7.4 Progress indicators for long operations
+- **What**: Add progress bars or spinners for batch import, `bookmark-check`, `bookmark-reorg --llm`, and embedding refresh using simple stderr output (no external dependency).
+- **Scope**: `cli.py`, `check.py`, `reorg.py`, `search.py`
+- **Effort**: Low
+
+---
+
+## Priority Order
 
 | Priority | Item | Impact | Effort |
 |----------|------|--------|--------|
-| P0 | 5.1 Integration tests | High | Medium | ✅ Done |
-| P0 | 1.1 Retry with backoff | High | Low | ✅ Done |
-| P0 | 7.1 Incremental embeddings | High | Low | ✅ Done (already implemented) |
-| P1 | 1.2 Proper HTML parsing | Medium | Low | ✅ Done |
-| P1 | 6.2 Logging | Medium | Medium | ✅ Done |
-| P1 | 3.1 Batch import | High | Medium | ✅ Done |
-| P1 | 3.6 Link health checking | Medium | Low | ✅ Done |
-| P1 | 5.5 CI pipeline | Medium | Low | ✅ Done | ✅ Done |
-| P2 | 3.2 Bookmark update/refresh | Medium | Medium | ✅ Done |
-| P2 | 6.1 Unified config file | Medium | Medium | ✅ Done |
-| P2 | 2.3 Search snippets | Medium | Medium | ✅ Done |
-| P2 | 4.4 Stats command | Low | Low | ✅ Done |
-| P3 | 3.3 Interactive mode | Low | Low | ✅ Done |
-| P3 | 3.5 Archive content | Medium | Medium | ✅ Done |
-| P3 | 4.1 Tag normalization | Low | Medium | ✅ Done |
-| P3 | 4.2 Folder reorg tool | Low | High | ✅ Done |
-| P3 | 4.3 Bidirectional linking | Low | Medium | ✅ Done |
+| P0 | 1.1 Fix duplicate logger in search.py | Low | Trivial |
+| P0 | 1.2 Wire or remove config.py | Medium | Medium |
+| P0 | 1.3 Fix created-date in update.py | Medium | Low |
+| P0 | 1.4 HEAD→GET fallback in check.py | Low | Low |
+| P0 | 1.5 validate_folder() branch tests | High | Low |
+| P1 | 2.1 Parallel batch processing | High | Medium |
+| P1 | 2.2 Lazy vault profile caching | Medium | Medium |
+| P1 | 2.3 Avoid double scan in update.py | Low | Low |
+| P1 | 3.1 Export search results (JSON/CSV) | Medium | Low |
+| P1 | 3.2 Open in browser | Low | Trivial |
+| P1 | 3.3 Date-range search filter | Medium | Medium |
+| P1 | 3.4 Tag-based search filter | Medium | Low |
+| P2 | 4.1 Delete bookmark command | Medium | Low |
+| P2 | 4.2 Bulk update command | Medium | Medium |
+| P2 | 4.3 Merge duplicate bookmarks | Low | Medium |
+| P2 | 4.4 Actionable bookmark-check output | Medium | Low |
+| P2 | 5.1 Browser bookmark HTML import | High | Medium |
+| P2 | 5.2 Export to browser HTML | Medium | Medium |
+| P2 | 5.3 OPML import/export | Low | Low |
+| P2 | 6.1 Structured JSON logging | Low | Low |
+| P2 | 6.2 Dry-run for destructive commands | Medium | Low |
+| P2 | 6.3 Network behavior tests | Medium | Medium |
+| P2 | 6.4 Property-based testing | Medium | Medium |
+| P3 | 7.1 Shell completions | Low | Low |
+| P3 | 7.2 bookmark-reorg --apply | Medium | Medium |
+| P3 | 7.3 Idempotent bookmark --force | Low | Low |
+| P3 | 7.4 Progress indicators | Low | Low |
