@@ -40,37 +40,42 @@ All independent — can be done in any order or in parallel.
 
 ---
 
-## Phase 2B: Complete Existing Features (Do Second)
+## Phase 2B: Complete Existing Features ✅ DONE
 
 Make half-built features actually useful. Depends on 2A being done.
 
-#### 2B.1 Dry-run for destructive commands
+#### 2B.1 Dry-run for destructive commands ✅
 - **What**: Add `--dry-run` to `bookmark-reorg` (prerequisite for --apply) and prepare `check.py` for future `--delete` flag. Note: `bookmark-update` already has `--dry-run`.
 - **Files**: `reorg.py`, `check.py`
 - **Effort**: Low | **Impact**: High (safety net)
+- **Resolved**: commit `2cc55b1`
 
-#### 2B.2 `bookmark-reorg --apply`
+#### 2B.2 `bookmark-reorg --apply` ✅
 - **What**: Execute proposed folder moves via `shutil.move()`, update search index. Without this, reorg only prints suggestions users must act on manually.
 - **Depends on**: 2B.1 (dry-run must exist alongside)
-- **Files**: `reorg.py`
+- **Files**: `reorg.py`, `tests/test_reorg.py`
 - **Effort**: Medium | **Impact**: High
+- **Resolved**: commit `093a954`
 
-#### 2B.3 `bookmark-check` actionable output
+#### 2B.3 `bookmark-check` actionable output ✅
 - **What**: Add `--delete` (remove broken bookmark files), `--tag-broken` (add tag to frontmatter), and `--format json` for scriptable output.
 - **Depends on**: 2A.3 (GET fallback reduces false positives), 2B.1 (dry-run for safety)
-- **Files**: `check.py`
+- **Files**: `check.py`, `tests/test_check.py`
 - **Effort**: Low | **Impact**: High
+- **Resolved**: commit `733bf10`
 
-#### 2B.4 `validate_folder()` branch-level tests
+#### 2B.4 `validate_folder()` branch-level tests ✅
 - **What**: Cover every branch: invalid paths, existing folders, new subfolders with/without support, nested rejection.
 - **Files**: `tests/test_bookmarks.py`
 - **Effort**: Low | **Impact**: Medium (highest priority test gap)
+- **Resolved**: commit `30f7709`
 
-#### 2B.5 Network behavior tests
+#### 2B.5 Network behavior tests ✅
 - **What**: Mock HTTP 404, 500, timeouts, SSL errors, 405+GET fallback, rate-limit responses. Covers `check.py`, `fetch.py`, `http_retry.py`.
 - **Depends on**: 2A.3 (tests should cover new GET fallback)
-- **Files**: `tests/`
+- **Files**: `tests/test_check.py`, `tests/test_fetch.py`, `tests/test_http_retry.py`
 - **Effort**: Medium | **Impact**: Medium
+- **Resolved**: commit `e3637b8`
 
 ---
 
@@ -177,11 +182,11 @@ Make half-built features actually useful. Depends on 2A being done.
 | ~~**2A.3**~~ | ~~HEAD→GET fallback in check.py~~ | High | Low | — | ✅ |
 | ~~**2A.4**~~ | ~~Remove dead config.py~~ | Low | Trivial | — | ✅ |
 | ~~**2A.5**~~ | ~~Eliminate double vault scan~~ | Medium | Low | — | ✅ |
-| **2B.1** | Dry-run for destructive commands | High | Low | — |
-| **2B.2** | bookmark-reorg --apply | High | Medium | 2B.1 |
-| **2B.3** | bookmark-check actionable output | High | Low | 2A.3, 2B.1 |
-| **2B.4** | validate_folder() branch tests | Medium | Low | — |
-| **2B.5** | Network behavior tests | Medium | Medium | 2A.3 |
+| ~~**2B.1**~~ | ~~Dry-run for destructive commands~~ | High | Low | — | ✅ |
+| ~~**2B.2**~~ | ~~bookmark-reorg --apply~~ | High | Medium | 2B.1 | ✅ |
+| ~~**2B.3**~~ | ~~bookmark-check actionable output~~ | High | Low | 2A.3, 2B.1 | ✅ |
+| ~~**2B.4**~~ | ~~validate_folder() branch tests~~ | Medium | Low | — | ✅ |
+| ~~**2B.5**~~ | ~~Network behavior tests~~ | Medium | Medium | 2A.3 | ✅ |
 | **2C.1** | Delete bookmark command | High | Low | — |
 | **2C.2** | Bulk update command | Medium | Medium | 2A.5 |
 | **2C.3** | Idempotent bookmark --force | Medium | Low | — |
