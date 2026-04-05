@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import argparse
 import http.client
+import json
 import logging
+import re
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -82,6 +84,84 @@ def check_bookmarks(
     return problems
 
 
+def delete_broken(
+    problems: list[dict[str, object]],
+    *,
+    dry_run: bool = False,
+) -> tuple[int, list[dict[str, object]]]:
+    """Delete the note files for broken bookmarks.
+
+    Returns (deleted_count, errors).  In dry-run mode, no files are
+    removed; the returned count reflects what *would* be deleted.
+    """
+    deleted = 0
+    errors: list[dict[str, object]] = []
+    for entry in problems:
+        path = Path(str(entry["path"]))
+        if dry_run:
+            logger.info("[dry-run] would delete %s", path)
+            deleted += 1
+            continue
+        try:
+            path.unlink()
+            logger.info("Deleted %s", path)
+            deleted += 1
+        except OSError as exc:
+            errors.append({"path": str(path), "error": str(exc)})
+            logger.error("Failed to delete %s: %s", path, exc)
+    return deleted, errors
+
+
+def tag_broken(
+    problems: list[dict[str, object]],
+    *,
+    dry_run: bool = False,
+) -> int:
+    """Add a ``broken`` tag to the frontmatter of each broken bookmark note.
+
+    Returns the number of files updated (or that would be updated in dry-run).
+    """
+    tagged = 0
+    for entry in problems:
+        path = Path(str(entry["path"]))
+        try:
+            text = path.read_text(encoding="utf-8")
+        except OSError:
+            continue
+
+        # Avoid double-tagging
+        if "broken" in text[:text.find("---", 1)]:
+            continue
+
+        # Inject "broken" into an existing tags list, or add a tags line
+        if re.search(r"^tags:", text, re.MULTILINE):
+            updated = re.sub(
+                r"^(tags:\s*\[)(.*?)(\])",
+                lambda m: (
+                    f"{m.group(1)}{m.group(2) + ', ' if m.group(2).strip() else ''}broken{m.group(3)}"
+                ),
+                text,
+                count=1,
+                flags=re.MULTILINE,
+            )
+        else:
+            # Insert tags line after the opening ---
+            updated = text.replace("---\n", "---\ntags: [broken]\n", 1)
+
+        if dry_run:
+            logger.info("[dry-run] would tag %s as broken", path)
+            tagged += 1
+            continue
+
+        try:
+            path.write_text(updated, encoding="utf-8")
+            tagged += 1
+        except OSError as exc:
+            logger.error("Failed to tag %s: %s", path, exc)
+
+    return tagged
+
+
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     """Parse CLI arguments for bookmark health checking."""
     parser = argparse.ArgumentParser(
@@ -97,6 +177,22 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         "--dry-run",
         action="store_true",
         help="Show what actions would be taken without making any changes",
+    )
+    parser.add_argument(
+        "--delete",
+        action="store_true",
+        help="Delete broken bookmark files (use --dry-run to preview)",
+    )
+    parser.add_argument(
+        "--tag-broken",
+        action="store_true",
+        help="Add a 'broken' tag to the frontmatter of broken bookmark files",
+    )
+    parser.add_argument(
+        "--format",
+        choices=["text", "json"],
+        default="text",
+        help="Output format (default: text)",
     )
     parser.add_argument(
         "--verbose",
@@ -122,6 +218,21 @@ def main(argv: Sequence[str] | None = None) -> int:
     configure_logging(verbose=args.verbose, quiet=args.quiet)
 
     problems = check_bookmarks(timeout=args.timeout)
+
+    if args.format == "json":
+        output = [
+            {
+                "path": str(entry["path"]),
+                "url": entry["url"],
+                "title": entry["title"],
+                "status": entry["status"],
+                "reason": entry["reason"],
+            }
+            for entry in problems
+        ]
+        print(json.dumps(output, indent=2))
+        return 1 if problems else 0
+
     if not problems:
         print("All bookmark URLs are reachable.")
         return 0
@@ -135,6 +246,19 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(f"    Status: {label} — {entry['reason']}")
         print(f"    Path: {entry['path']}")
         print()
+
+    if args.delete:
+        deleted, errors = delete_broken(problems, dry_run=args.dry_run)
+        verb = "Would delete" if args.dry_run else "Deleted"
+        print(f"{verb} {deleted} bookmark file(s).")
+        if errors:
+            for err in errors:
+                logger.error("Delete failed for %s: %s", err["path"], err["error"])
+
+    if args.tag_broken:
+        tagged = tag_broken(problems, dry_run=args.dry_run)
+        verb = "Would tag" if args.dry_run else "Tagged"
+        print(f"{verb} {tagged} bookmark(s) as broken.")
 
     return 1
 

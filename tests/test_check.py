@@ -1,12 +1,13 @@
 from __future__ import annotations
 
+import json
 import urllib.error
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import MagicMock, patch
 import unittest
 
-from bookmark_tools.check import check_bookmarks, check_url
+from bookmark_tools.check import check_bookmarks, check_url, delete_broken, tag_broken
 
 
 class CheckUrlTest(unittest.TestCase):
@@ -147,6 +148,123 @@ class CheckBookmarksTest(unittest.TestCase):
                 problems = check_bookmarks(bookmarks_dir=Path(tmp) / "Bookmarks")
 
         self.assertEqual(problems, [])
+
+
+class DeleteBrokenTest(unittest.TestCase):
+    def _make_problem(self, path: Path) -> dict:
+        return {"path": path, "url": "https://example.com", "title": "Test", "status": 404, "reason": "Not Found"}
+
+    def test_deletes_broken_file(self) -> None:
+        """It deletes broken bookmark files."""
+        with TemporaryDirectory() as tmp:
+            note = Path(tmp) / "broken.md"
+            note.write_text("---\nurl: https://example.com\n---\n", encoding="utf-8")
+            deleted, errors = delete_broken([self._make_problem(note)])
+            self.assertEqual(deleted, 1)
+            self.assertEqual(errors, [])
+            self.assertFalse(note.exists())
+
+    def test_dry_run_does_not_delete(self) -> None:
+        """It reports what would be deleted without removing files."""
+        with TemporaryDirectory() as tmp:
+            note = Path(tmp) / "broken.md"
+            note.write_text("content", encoding="utf-8")
+            deleted, errors = delete_broken([self._make_problem(note)], dry_run=True)
+            self.assertEqual(deleted, 1)
+            self.assertTrue(note.exists())
+
+    def test_returns_zero_for_empty_list(self) -> None:
+        """It handles an empty problem list."""
+        deleted, errors = delete_broken([])
+        self.assertEqual(deleted, 0)
+        self.assertEqual(errors, [])
+
+
+class TagBrokenTest(unittest.TestCase):
+    def _make_problem(self, path: Path) -> dict:
+        return {"path": path, "url": "https://example.com", "title": "Test", "status": 404, "reason": "Not Found"}
+
+    def test_adds_broken_tag_to_existing_tags_list(self) -> None:
+        """It appends 'broken' to an existing tags list."""
+        with TemporaryDirectory() as tmp:
+            note = Path(tmp) / "note.md"
+            note.write_text("---\ntags: [python]\nurl: https://example.com\n---\n", encoding="utf-8")
+            tagged = tag_broken([self._make_problem(note)])
+            self.assertEqual(tagged, 1)
+            content = note.read_text()
+            self.assertIn("broken", content)
+
+    def test_adds_tags_line_when_none_exists(self) -> None:
+        """It creates a tags field when the note has none."""
+        with TemporaryDirectory() as tmp:
+            note = Path(tmp) / "note.md"
+            note.write_text("---\nurl: https://example.com\n---\n", encoding="utf-8")
+            tagged = tag_broken([self._make_problem(note)])
+            self.assertEqual(tagged, 1)
+            self.assertIn("broken", note.read_text())
+
+    def test_does_not_double_tag(self) -> None:
+        """It skips notes that already have the broken tag."""
+        with TemporaryDirectory() as tmp:
+            note = Path(tmp) / "note.md"
+            note.write_text("---\ntags: [broken]\nurl: https://example.com\n---\n", encoding="utf-8")
+            tagged = tag_broken([self._make_problem(note)])
+            self.assertEqual(tagged, 0)
+
+    def test_dry_run_does_not_write(self) -> None:
+        """It reports would-be changes without modifying files."""
+        with TemporaryDirectory() as tmp:
+            note = Path(tmp) / "note.md"
+            original = "---\ntags: [python]\nurl: https://example.com\n---\n"
+            note.write_text(original, encoding="utf-8")
+            tagged = tag_broken([self._make_problem(note)], dry_run=True)
+            self.assertEqual(tagged, 1)
+            self.assertEqual(note.read_text(), original)
+
+
+class CheckFormatJsonTest(unittest.TestCase):
+    def test_json_output_structure(self) -> None:
+        """--format json produces a valid JSON array of problem entries."""
+        from bookmark_tools.check import main as check_main
+        import io
+
+        fake_problems = [
+            {
+                "path": Path("/tmp/broken.md"),
+                "url": "https://example.com/broken",
+                "title": "Broken Page",
+                "status": 404,
+                "reason": "Not Found",
+            }
+        ]
+        with (
+            patch("bookmark_tools.check.check_bookmarks", return_value=fake_problems),
+            patch("sys.stdout", new_callable=io.StringIO) as mock_stdout,
+        ):
+            check_main(["--format", "json"])
+
+        output = json.loads(mock_stdout.getvalue())
+        self.assertIsInstance(output, list)
+        self.assertEqual(len(output), 1)
+        self.assertEqual(output[0]["url"], "https://example.com/broken")
+        self.assertEqual(output[0]["status"], 404)
+        self.assertIn("path", output[0])
+        self.assertIn("reason", output[0])
+
+    def test_json_empty_when_no_problems(self) -> None:
+        """--format json outputs an empty array when all URLs are healthy."""
+        from bookmark_tools.check import main as check_main
+        import io
+
+        with (
+            patch("bookmark_tools.check.check_bookmarks", return_value=[]),
+            patch("sys.stdout", new_callable=io.StringIO) as mock_stdout,
+        ):
+            result = check_main(["--format", "json"])
+
+        output = json.loads(mock_stdout.getvalue())
+        self.assertEqual(output, [])
+        self.assertEqual(result, 0)
 
 
 if __name__ == "__main__":
