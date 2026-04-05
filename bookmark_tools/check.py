@@ -19,26 +19,33 @@ DEFAULT_CHECK_TIMEOUT = 15
 def check_url(url: str, *, timeout: int = DEFAULT_CHECK_TIMEOUT) -> tuple[int, str]:
     """Check a URL and return (status_code, reason).
 
+    Tries HEAD first; falls back to a minimal GET when HEAD returns 405
+    (Method Not Allowed) to avoid false broken-link reports.
     Returns (0, error_message) for connection failures.
     """
-    request = urllib.request.Request(
-        url,
-        method="HEAD",
-        headers={"User-Agent": "bookmark-check/1.0"},
-    )
-    try:
-        with urllib.request.urlopen(request, timeout=timeout) as response:
-            return response.status, "OK"
-    except urllib.error.HTTPError as exc:
-        return exc.code, exc.reason
-    except (
-        urllib.error.URLError,
-        TimeoutError,
-        OSError,
-        http.client.InvalidURL,
-    ) as exc:
-        reason = str(getattr(exc, "reason", exc))
-        return 0, reason
+    for method in ("HEAD", "GET"):
+        request = urllib.request.Request(
+            url,
+            method=method,
+            headers={"User-Agent": "bookmark-check/1.0"},
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=timeout) as response:
+                return response.status, "OK"
+        except urllib.error.HTTPError as exc:
+            if exc.code == 405 and method == "HEAD":
+                continue
+            return exc.code, exc.reason
+        except (
+            urllib.error.URLError,
+            TimeoutError,
+            OSError,
+            http.client.InvalidURL,
+        ) as exc:
+            reason = str(getattr(exc, "reason", exc))
+            return 0, reason
+    # Should not be reached, but satisfy the type checker
+    return 0, "Unknown error"
 
 
 def check_bookmarks(

@@ -38,6 +38,55 @@ class CheckUrlTest(unittest.TestCase):
         self.assertEqual(status, 0)
         self.assertIn("Connection refused", reason)
 
+    def test_falls_back_to_get_when_head_returns_405(self) -> None:
+        """It retries with GET when HEAD returns 405 Method Not Allowed."""
+        head_exc = urllib.error.HTTPError(
+            "https://example.com", 405, "Method Not Allowed", {}, None
+        )
+        fake_response = MagicMock()
+        fake_response.status = 200
+        fake_response.__enter__ = lambda s: s
+        fake_response.__exit__ = MagicMock(return_value=False)
+
+        call_count = 0
+
+        def side_effect(request, **kw):
+            nonlocal call_count
+            call_count += 1
+            if request.get_method() == "HEAD":
+                raise head_exc
+            return fake_response
+
+        with patch(
+            "bookmark_tools.check.urllib.request.urlopen", side_effect=side_effect
+        ):
+            status, reason = check_url("https://example.com")
+
+        self.assertEqual(status, 200)
+        self.assertEqual(reason, "OK")
+        self.assertEqual(call_count, 2)
+
+    def test_returns_405_when_get_also_fails(self) -> None:
+        """It reports the GET error code when both HEAD and GET fail."""
+        head_exc = urllib.error.HTTPError(
+            "https://example.com", 405, "Method Not Allowed", {}, None
+        )
+        get_exc = urllib.error.HTTPError(
+            "https://example.com", 403, "Forbidden", {}, None
+        )
+
+        def side_effect(request, **kw):
+            if request.get_method() == "HEAD":
+                raise head_exc
+            raise get_exc
+
+        with patch(
+            "bookmark_tools.check.urllib.request.urlopen", side_effect=side_effect
+        ):
+            status, reason = check_url("https://example.com")
+
+        self.assertEqual(status, 403)
+
 
 class CheckBookmarksTest(unittest.TestCase):
     def test_reports_broken_links(self) -> None:
