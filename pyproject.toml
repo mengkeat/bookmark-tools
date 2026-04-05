@@ -13,6 +13,7 @@ bookmark = "bookmark_tools:main"
 bookmark-search = "bookmark_tools.search:main"
 bookmark-check = "bookmark_tools.check:main"
 bookmark-stats = "bookmark_tools.stats:main"
+bookmark-update = "bookmark_tools.update:main"
 
 [tool.uv]
 dev-dependencies = [
