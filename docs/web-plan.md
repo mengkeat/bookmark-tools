@@ -121,9 +121,9 @@ def serialize_search_result(r):
 - Horizontal bar: top 20 tags (`top_tags`)
 - Chart.js renders from `/api/stats` JSON — ~15 lines of JS per chart
 
-### Phase 3: Create, Edit & Manage (future)
+### Phase 3: Create, Edit & Manage ✅
 
-**Step 6 — Bookmark CRUD** (`web/routes/bookmarks.py`)
+**Step 6 — Bookmark CRUD** (`web/routes/bookmarks.py`) ✅
 
 | Method | Endpoint | Description | Wraps |
 |--------|----------|-------------|-------|

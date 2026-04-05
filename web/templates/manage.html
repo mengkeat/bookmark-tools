@@ -1,0 +1,189 @@
+{% extends "base.html" %}
+{% block title %}Manage — Bookmark Tools{% endblock %}
+{% block content %}
+<h2>Manage Bookmarks</h2>
+
+<div class="grid manage-grid">
+
+  {# ── Create ─────────────────────────────────────────────────────────── #}
+  <section>
+    <h3>Add Bookmark</h3>
+    <form id="create-form">
+      <input type="url" id="create-url" name="url" placeholder="https://…" required>
+      <button type="submit" id="create-btn">Add</button>
+    </form>
+    <div id="create-result"></div>
+  </section>
+
+  {# ── Update / re-classify ────────────────────────────────────────────── #}
+  <section>
+    <h3>Re-fetch &amp; Re-classify</h3>
+    <form id="update-form">
+      <input type="url" id="update-url" name="url" placeholder="https://… (must already exist)" required>
+      <button type="submit" id="update-btn">Update</button>
+    </form>
+    <div id="update-result"></div>
+  </section>
+
+</div>
+
+{# ── Link checker ────────────────────────────────────────────────────────── #}
+<section>
+  <h3>Link Checker</h3>
+  <button id="check-btn">Start Check</button>
+  <progress id="check-progress" value="0" max="100" style="display:none;width:100%;margin-top:.5rem"></progress>
+  <p id="check-status"></p>
+  <div id="check-results"></div>
+</section>
+
+{# ── Reclassification proposals ──────────────────────────────────────────── #}
+<section>
+  <h3>Reclassification Proposals</h3>
+  <button id="reorg-btn">Analyse (heuristic)</button>
+  <div id="reorg-results"></div>
+</section>
+
+<script>
+// ── helpers ──────────────────────────────────────────────────────────────────
+function setStatus(el, msg, ok) {
+  el.textContent = msg;
+  el.style.color = ok ? "var(--pico-color)" : "var(--pico-del-color, red)";
+}
+
+// ── create ───────────────────────────────────────────────────────────────────
+document.getElementById("create-form").addEventListener("submit", async e => {
+  e.preventDefault();
+  const url = document.getElementById("create-url").value.trim();
+  const btn = document.getElementById("create-btn");
+  const out = document.getElementById("create-result");
+  btn.disabled = true;
+  btn.setAttribute("aria-busy", "true");
+  out.textContent = "Creating…";
+  try {
+    const resp = await fetch("/api/bookmarks", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({url}),
+    });
+    const data = await resp.json();
+    if (!resp.ok) {
+      setStatus(out, "Error: " + (data.error || resp.statusText), false);
+    } else {
+      setStatus(out, `Created: ${data.path}  (${data.folder_message})`, true);
+      document.getElementById("create-url").value = "";
+    }
+  } catch (err) {
+    setStatus(out, "Error: " + err, false);
+  } finally {
+    btn.disabled = false;
+    btn.removeAttribute("aria-busy");
+  }
+});
+
+// ── update ───────────────────────────────────────────────────────────────────
+document.getElementById("update-form").addEventListener("submit", async e => {
+  e.preventDefault();
+  const url = document.getElementById("update-url").value.trim();
+  const btn = document.getElementById("update-btn");
+  const out = document.getElementById("update-result");
+  btn.disabled = true;
+  btn.setAttribute("aria-busy", "true");
+  out.textContent = "Updating…";
+  try {
+    const resp = await fetch("/api/bookmarks/update", {
+      method: "PUT",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({url}),
+    });
+    const data = await resp.json();
+    if (!resp.ok) {
+      setStatus(out, "Error: " + (data.error || resp.statusText), false);
+    } else {
+      setStatus(out, `Updated: ${data.path}`, true);
+    }
+  } catch (err) {
+    setStatus(out, "Error: " + err, false);
+  } finally {
+    btn.disabled = false;
+    btn.removeAttribute("aria-busy");
+  }
+});
+
+// ── link checker (SSE) ───────────────────────────────────────────────────────
+document.getElementById("check-btn").addEventListener("click", async () => {
+  const btn = document.getElementById("check-btn");
+  const progress = document.getElementById("check-progress");
+  const statusEl = document.getElementById("check-status");
+  const results = document.getElementById("check-results");
+
+  btn.disabled = true;
+  progress.style.display = "block";
+  progress.value = 0;
+  statusEl.textContent = "Starting…";
+  results.innerHTML = "";
+
+  const resp = await fetch("/api/check", {method: "POST",
+    headers: {"Content-Type": "application/json"}, body: "{}"});
+  const reader = resp.body.getReader();
+  const decoder = new TextDecoder();
+  let buf = "";
+
+  while (true) {
+    const {done, value} = await reader.read();
+    if (done) break;
+    buf += decoder.decode(value, {stream: true});
+    const lines = buf.split("\n\n");
+    buf = lines.pop();
+    for (const chunk of lines) {
+      const line = chunk.trim();
+      if (!line.startsWith("data:")) continue;
+      const evt = JSON.parse(line.slice(5).trim());
+      if (evt.total) progress.max = evt.total;
+      progress.value = evt.checked;
+      if (evt.type === "done") {
+        statusEl.textContent = `Done — checked ${evt.checked} notes.`;
+        btn.disabled = false;
+      } else if (evt.type === "result" && evt.broken) {
+        const div = document.createElement("div");
+        div.className = "check-problem";
+        div.innerHTML = `<strong>${evt.title}</strong> — <code>${evt.status}</code> ${evt.reason}<br>
+          <small><a href="${evt.url}" target="_blank" rel="noopener">${evt.url}</a> · ${evt.path}</small>`;
+        results.appendChild(div);
+      }
+    }
+  }
+});
+
+// ── reclassification proposals ───────────────────────────────────────────────
+document.getElementById("reorg-btn").addEventListener("click", async () => {
+  const btn = document.getElementById("reorg-btn");
+  const out = document.getElementById("reorg-results");
+  btn.disabled = true;
+  btn.setAttribute("aria-busy", "true");
+  out.textContent = "Analysing vault…";
+  try {
+    const resp = await fetch("/api/reorg");
+    const data = await resp.json();
+    if (!resp.ok) {
+      out.textContent = "Error: " + (data.error || resp.statusText);
+    } else if (!data.proposals.length) {
+      out.textContent = "No reclassifications proposed — all bookmarks look well-placed.";
+    } else {
+      out.innerHTML = `<p>${data.proposals.length} proposal(s):</p>`;
+      const ul = document.createElement("ul");
+      for (const p of data.proposals) {
+        const li = document.createElement("li");
+        li.textContent = `${p.title}: ${p.current_folder} → ${p.proposed_folder}`;
+        ul.appendChild(li);
+      }
+      out.appendChild(ul);
+    }
+  } catch (err) {
+    out.textContent = "Error: " + err;
+  } finally {
+    btn.disabled = false;
+    btn.removeAttribute("aria-busy");
+  }
+});
+</script>
+{% endblock %}

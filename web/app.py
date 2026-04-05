@@ -21,6 +21,7 @@ def create_app() -> Flask:
     load_env()
     app = Flask(__name__, template_folder="templates", static_folder="static")
 
+    from web.routes.bookmarks import bookmarks_bp
     from web.routes.browse import browse_bp
     from web.routes.search import search_bp
     from web.routes.stats import stats_bp
@@ -28,5 +29,6 @@ def create_app() -> Flask:
     app.register_blueprint(browse_bp)
     app.register_blueprint(search_bp)
     app.register_blueprint(stats_bp)
+    app.register_blueprint(bookmarks_bp)
 
     return app
