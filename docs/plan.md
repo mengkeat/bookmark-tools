@@ -175,4 +175,4 @@ When doing batch imports, parallelize fetching and classification across URLs us
 | P3 | 3.5 Archive content | Medium | Medium | ✅ Done |
 | P3 | 4.1 Tag normalization | Low | Medium | ✅ Done |
 | P3 | 4.2 Folder reorg tool | Low | High | ✅ Done |
-| P3 | 4.3 Bidirectional linking | Low | Medium |
+| P3 | 4.3 Bidirectional linking | Low | Medium | ✅ Done |
