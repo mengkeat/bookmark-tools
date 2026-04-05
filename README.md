@@ -6,8 +6,16 @@ CLI tools for fetching, classifying, summarizing, and searching bookmarks in an 
 
 - **Bookmark creation**: Fetch a web page, classify it with LLM (or heuristic fallback), generate a summary, and write a structured markdown note to your vault.
 - **Batch import**: Import multiple URLs from a file or stdin with `--file`/`-f`.
-- **Search**: BM25 keyword search, semantic vector search, or hybrid search over your bookmark notes.
+- **Interactive mode**: Review and confirm classification before writing with `--interactive`/`-i`.
+- **Content archiving**: Save a cleaned copy of page content alongside the bookmark with `--archive`.
+- **Bookmark update**: Re-fetch and re-classify existing bookmarks with `bookmark-update`, preserving creation date.
+- **Search**: BM25 keyword search, semantic vector search, or hybrid search with context snippets.
 - **Link health checking**: Validate all bookmarked URLs with `bookmark-check` to find dead links.
+- **Vault statistics**: View bookmark counts, tag distribution, and folder stats with `bookmark-stats`.
+- **Folder reorganization**: Propose folder reclassifications with `bookmark-reorg`.
+- **Tag normalization**: Consistent lowercase kebab-case tags with abbreviation alias resolution.
+- **Bidirectional linking**: Update related fields of similar existing bookmarks when creating new ones.
+- **Unified config file**: Consolidate settings in a `bookmark-tools.toml` config file.
 - **Zero runtime dependencies** beyond Python stdlib (numpy is optional for faster cosine similarity).
 
 ## Installation
@@ -20,13 +28,41 @@ uv sync
 
 ## Configuration
 
+Settings can be configured via environment variables (`.env` file) or a unified TOML config file.
+
+### Config file (recommended)
+
+Create a `bookmark-tools.toml` in your vault or working directory:
+
+```toml
+[llm]
+api_key = "your-api-key"
+model = "gpt-4.1-mini"
+base_url = "https://api.openai.com/v1"
+provider = ""  # or "openrouter"
+
+[timeouts]
+fetch = 20
+llm_classify = 20
+llm_summarize = 180
+link_check = 15
+
+[search]
+similarity_threshold = 0.40
+default_limit = 10
+```
+
+The file is auto-discovered in `$VAULT_PATH` or the current directory. Override with `BOOKMARK_CONFIG` env var.
+
+### Environment variables
+
 Copy `.env.example` to `.env` and fill in your values:
 
 ```bash
 cp .env.example .env
 ```
 
-### Required environment variables
+#### Required environment variables
 
 | Variable | Description |
 |---|---|
@@ -35,7 +71,7 @@ cp .env.example .env
 | `LLM_PROVIDER` | `openrouter` or `litellm` (default: `openrouter`) |
 | `MODEL_ID` | Model identifier for classification (default: `gpt-4.1-mini`) |
 
-### Optional overrides
+#### Optional overrides
 
 | Variable | Description |
 |---|---|
@@ -50,7 +86,7 @@ cp .env.example .env
 
 ```bash
 # Single URL
-uv run bookmark <URL> [--dry-run] [--disallow-new-subfolder]
+uv run bookmark <URL> [--dry-run] [--interactive] [--archive]
 
 # Batch import from file
 uv run bookmark --file urls.txt [--dry-run]
@@ -64,6 +100,8 @@ cat urls.txt | uv run bookmark --file -
 | `<URL>` | Web page URL to fetch and classify (required) |
 | `--file`, `-f` | Read URLs from a file (one per line); use `-` for stdin |
 | `--dry-run` | Print the proposed note without writing it to disk |
+| `--interactive`, `-i` | Review and confirm classification before writing |
+| `--archive` | Save a cleaned copy of the page content alongside the note |
 | `--disallow-new-subfolder` | Restrict placement to existing folders only |
 | `--verbose`, `-v` | Enable verbose (debug) logging output |
 | `--quiet`, `-q` | Suppress all logging output except errors |
@@ -103,6 +141,30 @@ uv run bookmark-check [--timeout <N>] [--verbose] [--quiet]
 | `--verbose`, `-v` | Enable verbose (debug) logging output |
 | `--quiet`, `-q` | Suppress all logging output except errors |
 
+### Update an existing bookmark
+
+```bash
+uv run bookmark-update <URL> [--dry-run] [--verbose] [--quiet]
+```
+
+Re-fetches and re-classifies an existing bookmark while preserving its file path and original creation date.
+
+### Vault statistics
+
+```bash
+uv run bookmark-stats [--verbose] [--quiet]
+```
+
+Shows vault statistics: total bookmarks, bookmarks per folder, type distribution, top tags, and top parent topics.
+
+### Folder reorganization
+
+```bash
+uv run bookmark-reorg [--llm] [--verbose] [--quiet]
+```
+
+Proposes folder reclassifications for existing bookmarks based on the current classifier. Uses heuristics by default; pass `--llm` to use LLM-based classification.
+
 ## How it works
 
 When you run `uv run bookmark <URL>`, the tool:
@@ -123,14 +185,14 @@ When you run `uv run bookmark <URL>`, the tool:
 ## Development
 
 ```bash
-uv run pytest                    # Run tests
-uv run ruff check src tests      # Lint
-uv run ruff format src tests     # Format
+uv run pytest tests/             # Run tests
+uv run ruff check bookmark_tools tests   # Lint
+uv run ruff format bookmark_tools tests  # Format
 ```
 
 ## Project structure
 
 - `AGENTS.md` — Detailed code structure and module documentation for coding agents
 - `docs/plan.md` — Feature and improvement roadmap
-- `src/bookmark_tools/` — Main package source code
+- `bookmark_tools/` — Main package source code
 - `tests/` — Unit tests
