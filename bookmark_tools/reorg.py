@@ -79,6 +79,58 @@ def propose_reclassifications(
     return proposals
 
 
+def apply_reclassifications(
+    proposals: list[dict[str, str]],
+    bookmarks_dir: Path | None = None,
+) -> tuple[int, list[dict[str, str]]]:
+    """Execute the proposed folder moves by renaming files on disk.
+
+    Returns (moved_count, errors) where errors is a list of dicts with
+    ``path`` and ``error`` keys for any moves that failed.
+    """
+    if bookmarks_dir is None:
+        bookmarks_dir = get_bookmarks_dir()
+
+    moved = 0
+    errors: list[dict[str, str]] = []
+
+    for entry in proposals:
+        src = Path(entry["path"])
+        proposed_folder = entry["proposed_folder"].strip("()")
+        if proposed_folder == "root":
+            proposed_folder = ""
+        dest_dir = bookmarks_dir / proposed_folder if proposed_folder else bookmarks_dir
+        dest_dir.mkdir(parents=True, exist_ok=True)
+        dest = dest_dir / src.name
+
+        # Avoid overwriting an existing file at the destination
+        if dest.exists() and dest != src:
+            stem = src.stem
+            suffix = src.suffix
+            index = 2
+            while dest.exists():
+                dest = dest_dir / f"{stem}-{index}{suffix}"
+                index += 1
+
+        try:
+            shutil.move(str(src), str(dest))
+            logger.info("Moved %s → %s", src, dest)
+            moved += 1
+        except OSError as exc:
+            errors.append({"path": str(src), "error": str(exc)})
+            logger.error("Failed to move %s: %s", src, exc)
+
+    if moved:
+        try:
+            from .search import refresh_search_index
+
+            refresh_search_index(bookmarks_dir=bookmarks_dir)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Search index refresh failed after moves: %s", exc)
+
+    return moved, errors
+
+
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     """Parse CLI arguments for folder reorganization."""
     parser = argparse.ArgumentParser(

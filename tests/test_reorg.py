@@ -2,9 +2,10 @@ from __future__ import annotations
 
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from unittest.mock import patch
 import unittest
 
-from bookmark_tools.reorg import propose_reclassifications
+from bookmark_tools.reorg import apply_reclassifications, propose_reclassifications
 
 
 class ReorgTest(unittest.TestCase):
@@ -113,6 +114,122 @@ class ReorgTest(unittest.TestCase):
             proposals = propose_reclassifications(bookmarks_dir=bookmarks_dir)
 
         self.assertEqual(proposals, [])
+
+
+class ApplyReclassificationsTest(unittest.TestCase):
+    def test_moves_file_to_proposed_folder(self) -> None:
+        """It moves the note file to the proposed destination folder."""
+        with TemporaryDirectory() as tmp:
+            bookmarks_dir = Path(tmp) / "Bookmarks"
+            src_dir = bookmarks_dir / "Development"
+            dest_dir = bookmarks_dir / "ML-AI"
+            src_dir.mkdir(parents=True)
+            dest_dir.mkdir(parents=True)
+            note = src_dir / "misplaced.md"
+            note.write_text("---\ntitle: Test\n---\n", encoding="utf-8")
+
+            proposals = [
+                {
+                    "path": str(note),
+                    "title": "Test",
+                    "current_folder": "Development",
+                    "proposed_folder": "ML-AI",
+                }
+            ]
+            with patch("bookmark_tools.search.refresh_search_index"):
+                moved, errors = apply_reclassifications(
+                    proposals, bookmarks_dir=bookmarks_dir
+                )
+
+            self.assertEqual(moved, 1)
+            self.assertEqual(errors, [])
+            self.assertFalse(note.exists())
+            self.assertTrue((dest_dir / "misplaced.md").exists())
+
+    def test_creates_destination_folder_if_missing(self) -> None:
+        """It creates the destination folder when it does not exist."""
+        with TemporaryDirectory() as tmp:
+            bookmarks_dir = Path(tmp) / "Bookmarks"
+            src_dir = bookmarks_dir / "Development"
+            src_dir.mkdir(parents=True)
+            note = src_dir / "note.md"
+            note.write_text("---\ntitle: Note\n---\n", encoding="utf-8")
+
+            proposals = [
+                {
+                    "path": str(note),
+                    "title": "Note",
+                    "current_folder": "Development",
+                    "proposed_folder": "NewFolder",
+                }
+            ]
+            with patch("bookmark_tools.search.refresh_search_index"):
+                moved, errors = apply_reclassifications(
+                    proposals, bookmarks_dir=bookmarks_dir
+                )
+
+            self.assertEqual(moved, 1)
+            self.assertTrue((bookmarks_dir / "NewFolder" / "note.md").exists())
+
+    def test_renames_on_filename_conflict(self) -> None:
+        """It appends a numeric suffix when the destination filename already exists."""
+        with TemporaryDirectory() as tmp:
+            bookmarks_dir = Path(tmp) / "Bookmarks"
+            src_dir = bookmarks_dir / "Development"
+            dest_dir = bookmarks_dir / "ML-AI"
+            src_dir.mkdir(parents=True)
+            dest_dir.mkdir(parents=True)
+            # Existing file at destination
+            (dest_dir / "note.md").write_text("existing", encoding="utf-8")
+            # Source file with the same name
+            src_note = src_dir / "note.md"
+            src_note.write_text("new content", encoding="utf-8")
+
+            proposals = [
+                {
+                    "path": str(src_note),
+                    "title": "Note",
+                    "current_folder": "Development",
+                    "proposed_folder": "ML-AI",
+                }
+            ]
+            with patch("bookmark_tools.search.refresh_search_index"):
+                moved, errors = apply_reclassifications(
+                    proposals, bookmarks_dir=bookmarks_dir
+                )
+
+            self.assertEqual(moved, 1)
+            self.assertTrue((dest_dir / "note-2.md").exists())
+            self.assertEqual((dest_dir / "note.md").read_text(), "existing")
+
+    def test_returns_empty_on_no_proposals(self) -> None:
+        """It returns (0, []) when no proposals are given."""
+        with TemporaryDirectory() as tmp:
+            bookmarks_dir = Path(tmp) / "Bookmarks"
+            bookmarks_dir.mkdir()
+            moved, errors = apply_reclassifications([], bookmarks_dir=bookmarks_dir)
+        self.assertEqual(moved, 0)
+        self.assertEqual(errors, [])
+
+    def test_reports_error_for_missing_source(self) -> None:
+        """It records an error when the source file does not exist."""
+        with TemporaryDirectory() as tmp:
+            bookmarks_dir = Path(tmp) / "Bookmarks"
+            bookmarks_dir.mkdir()
+            proposals = [
+                {
+                    "path": str(bookmarks_dir / "missing.md"),
+                    "title": "Missing",
+                    "current_folder": "Development",
+                    "proposed_folder": "ML-AI",
+                }
+            ]
+            moved, errors = apply_reclassifications(
+                proposals, bookmarks_dir=bookmarks_dir
+            )
+        self.assertEqual(moved, 0)
+        self.assertEqual(len(errors), 1)
+        self.assertIn("missing.md", errors[0]["path"])
 
 
 if __name__ == "__main__":
