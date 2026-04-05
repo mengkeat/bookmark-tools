@@ -179,5 +179,37 @@ class UpdateBookmarkTest(unittest.TestCase):
             self.assertIn("created: 2025-01-15", content)
 
 
+class SingleVaultScanTest(unittest.TestCase):
+    def test_update_bookmark_scans_vault_once(self) -> None:
+        """update_bookmark performs only one vault scan (via collect_existing_notes)."""
+        with TemporaryDirectory() as tmp:
+            vault_dir, bookmarks_dir = _setup_vault(tmp)
+            env = {
+                "VAULT_PATH": str(vault_dir),
+                "BOOKMARKS_DIR": str(bookmarks_dir),
+            }
+            with (
+                patch.dict(os.environ, env, clear=True),
+                patch(
+                    "bookmark_tools.fetch.urllib.request.urlopen",
+                    side_effect=lambda req, **kw: _fake_urlopen(req, **kw),
+                ),
+                patch("bookmark_tools.summarize.shutil.which", return_value=None),
+                patch(
+                    "bookmark_tools.update.collect_existing_notes",
+                    wraps=__import__(
+                        "bookmark_tools.vault_profile", fromlist=["collect_existing_notes"]
+                    ).collect_existing_notes,
+                ) as mock_collect,
+            ):
+                update_bookmark(
+                    "https://example.com/sample",
+                    bookmarks_dir=bookmarks_dir,
+                    dry_run=True,
+                )
+
+        mock_collect.assert_called_once()
+
+
 if __name__ == "__main__":
     unittest.main()

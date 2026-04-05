@@ -22,7 +22,12 @@ logger = logging.getLogger(__name__)
 
 
 def find_note_by_url(url: str, bookmarks_dir: Path | None = None) -> Path | None:
-    """Find a bookmark note file by its URL."""
+    """Find a bookmark note file by its URL.
+
+    Performs a full vault scan.  Prefer passing a pre-built
+    ``BookmarkProfile`` and using ``profile.url_index`` directly when a
+    profile is already available, to avoid scanning the vault twice.
+    """
     if bookmarks_dir is None:
         bookmarks_dir = get_bookmarks_dir()
     normalized = url.rstrip("/")
@@ -48,14 +53,15 @@ def update_bookmark(
     if bookmarks_dir is None:
         bookmarks_dir = get_bookmarks_dir()
 
-    note_path = find_note_by_url(url, bookmarks_dir=bookmarks_dir)
+    # Single vault scan — use the url_index from the profile instead of a
+    # separate rglob pass in find_note_by_url.
+    profile = collect_existing_notes(bookmarks_dir=bookmarks_dir)
+    note_path = profile.url_index.get(url.rstrip("/"))
     if note_path is None:
         return None
 
     old_metadata, _ = read_frontmatter(note_path)
     old_created = str(old_metadata.get("created", "")).strip()
-
-    profile = collect_existing_notes(bookmarks_dir=bookmarks_dir)
     page_data = extract_page_data(url)
     similar_notes = rank_similar_notes(page_data, profile)
     llm_metadata = call_llm(page_data, profile, similar_notes, allow_new_subfolder=True)
