@@ -1,198 +1,198 @@
-# Feature & Improvement Plan — Phase 2
+# Feature & Improvement Plan — Phase 2 (Revised)
+
+Reorganized by dependency and impact. Bug fixes first, then completing existing features, then new capabilities, then polish.
 
 ---
 
-### 1. Code Quality & Bug Fixes (P0)
+## Phase 2A: Bug Fixes and Correctness ✅ DONE
 
-#### 1.1 Fix duplicate logger and TYPE_CHECKING block in `search.py`
-- **What**: Remove the duplicate `logger = logging.getLogger(__name__)` and `if TYPE_CHECKING` block.
-- **Scope**: `search.py`
+All independent — can be done in any order or in parallel.
+
+#### 2A.1 Fix duplicate logger/TYPE_CHECKING in `search.py` ✅
+- **What**: Remove duplicate `if TYPE_CHECKING` block and `logger` at lines 17-25.
+- **Files**: `search.py`
 - **Effort**: Trivial
+- **Resolved**: commit `abfdb76`
 
-#### 1.2 Wire `config.py` into the application or remove it
-- **What**: The `AppConfig`/`load_config()` module exists but nothing uses it. Either integrate it so modules read from `AppConfig` instead of raw env vars (eliminating the parallel config path), or remove the dead code.
-- **Scope**: `config.py`, `classify.py`, `summarize.py`, `embeddings.py`, `paths.py`, `search_index.py`
-- **Effort**: Medium
+#### 2A.2 Fix fragile created-date preservation in `update.py` ✅
+- **What**: `update_bookmark()` uses brittle string splitting (`split('created: ')`) to preserve the original created date after rendering. Add a `created_override` param to `render_note()` so the date is rendered correctly from the start. Remove the string-replacement hack.
+- **Files**: `render.py`, `update.py`, `tests/test_render.py` (new)
+- **Effort**: Low | **Impact**: High (data integrity)
+- **Resolved**: commit `e7aff91`
 
-#### 1.3 Fix fragile created-date preservation in `update.py`
-- **What**: Instead of string-replacing `created:` in rendered text, pass the original `created` date into `render_note()` (or `normalize_metadata()`) so it's rendered correctly from the start.
-- **Scope**: `update.py`, `render.py`, `types.py`
-- **Effort**: Low
+#### 2A.3 HEAD→GET fallback in `check.py` ✅
+- **What**: When a HEAD request returns 405, retry with GET (read minimal bytes) before marking the URL as broken. Eliminates false broken-link reports.
+- **Files**: `check.py`, `tests/test_check.py`
+- **Effort**: Low | **Impact**: High
+- **Resolved**: commit `933c4ef`
 
-#### 1.4 Fall back to GET on 405 in `check.py`
-- **What**: When a HEAD request returns 405 Method Not Allowed, retry with a GET request (reading minimal bytes) before marking the URL as broken.
-- **Scope**: `check.py`
-- **Effort**: Low
-
-#### 1.5 Add `validate_folder()` branch-level tests
-- **What**: This was called out as high-priority remaining tech debt. Add targeted tests covering every branch (invalid paths, existing folders, new subfolders with/without support, nested rejection, etc.).
-- **Scope**: `tests/test_bookmarks.py`
-- **Effort**: Low
-
----
-
-### 2. Performance (P1)
-
-#### 2.1 Parallel batch processing with `concurrent.futures`
-- **What**: Batch import (`--file`) currently processes URLs sequentially. Use a thread pool to parallelize fetching and classification across URLs.
-- **Scope**: `cli.py`
-- **Effort**: Medium
-
-#### 2.2 Lazy vault profile caching
-- **What**: `collect_existing_notes()` re-scans the entire vault directory tree on every invocation. Cache the profile in memory keyed by directory mtime, or persist a lightweight index, to speed up repeated runs (especially batch mode and search).
-- **Scope**: `vault_profile.py`
-- **Effort**: Medium
-
-#### 2.3 Avoid double vault scan in `bookmark-update`
-- **What**: `find_note_by_url()` in `update.py` does a full vault scan via `rglob("*.md")` + `read_frontmatter()`, then `update_bookmark()` calls `collect_existing_notes()` for another full scan. Use the profile's `url_index` for the lookup instead.
-- **Scope**: `update.py`
-- **Effort**: Low
-
----
-
-### 3. Search & Discovery (P1)
-
-#### 3.1 Export search results (JSON, CSV)
-- **What**: Add `--format json` and `--format csv` output options to `bookmark-search` for scripting and integration with other tools.
-- **Scope**: `search.py`
-- **Effort**: Low
-
-#### 3.2 "Open in browser" search action
-- **What**: Add an `--open` flag that opens the top search result's URL in the default browser (`webbrowser.open()`).
-- **Scope**: `search.py`
+#### 2A.4 Remove dead `config.py` ✅
+- **What**: `AppConfig`/`load_config()` is never imported by any module — all use `os.environ.get()` directly. Remove the dead module and its test. TOML config system deferred to 2D.1 when it can be wired in properly.
+- **Files**: `config.py` (deleted), `tests/test_config.py` (deleted)
 - **Effort**: Trivial
+- **Resolved**: commit `4061c26`
 
-#### 3.3 Date-range search filter
-- **What**: Add `--after` and `--before` flags to filter search results by `created` date, useful for finding recent or old bookmarks.
-- **Scope**: `search.py`, `search_index.py` (add `created` as an indexed column)
-- **Effort**: Medium
-
-#### 3.4 Tag-based search filter
-- **What**: Add a `--tag` flag to restrict results to bookmarks with a specific tag, complementing the existing `--folder` filter.
-- **Scope**: `search.py`, `search_index.py`
+#### 2A.5 Eliminate double vault scan in `update.py` ✅
+- **What**: `find_note_by_url()` does a full rglob scan, then `update_bookmark()` calls `collect_existing_notes()` for another full scan. Use `profile.url_index` for the lookup instead.
+- **Files**: `update.py`, `tests/test_update.py`
 - **Effort**: Low
+- **Resolved**: commit `d9bd8cd`
 
 ---
 
-### 4. Bookmark Management (P2)
+## Phase 2B: Complete Existing Features (Do Second)
 
-#### 4.1 Delete bookmark command (`bookmark-delete`)
-- **What**: Add a command to delete a bookmark by URL or file path, removing the note file and cleaning up the search index and embedding store.
-- **Scope**: New module `delete.py`, `pyproject.toml`
-- **Effort**: Low
+Make half-built features actually useful. Depends on 2A being done.
 
-#### 4.2 Bulk update command
-- **What**: Extend `bookmark-update` with `--all` or `--folder <FOLDER>` to re-process all (or a subset of) bookmarks, useful after changing the classification guide or LLM model.
-- **Scope**: `update.py`
-- **Effort**: Medium
+#### 2B.1 Dry-run for destructive commands
+- **What**: Add `--dry-run` to `bookmark-reorg` (prerequisite for --apply) and prepare `check.py` for future `--delete` flag. Note: `bookmark-update` already has `--dry-run`.
+- **Files**: `reorg.py`, `check.py`
+- **Effort**: Low | **Impact**: High (safety net)
 
-#### 4.3 Merge duplicate bookmarks
-- **What**: Detect bookmarks pointing to the same URL (after normalization, e.g., trailing slash, www prefix, query params) and offer to merge them.
-- **Scope**: `vault_profile.py`, new module or subcommand
-- **Effort**: Medium
+#### 2B.2 `bookmark-reorg --apply`
+- **What**: Execute proposed folder moves via `shutil.move()`, update search index. Without this, reorg only prints suggestions users must act on manually.
+- **Depends on**: 2B.1 (dry-run must exist alongside)
+- **Files**: `reorg.py`
+- **Effort**: Medium | **Impact**: High
 
-#### 4.4 `bookmark-check` actionable output
-- **What**: Add `--delete` flag to auto-delete or `--tag-broken` to tag broken bookmarks instead of just reporting them. Add `--format json` for scriptable output.
-- **Scope**: `check.py`
-- **Effort**: Low
+#### 2B.3 `bookmark-check` actionable output
+- **What**: Add `--delete` (remove broken bookmark files), `--tag-broken` (add tag to frontmatter), and `--format json` for scriptable output.
+- **Depends on**: 2A.3 (GET fallback reduces false positives), 2B.1 (dry-run for safety)
+- **Files**: `check.py`
+- **Effort**: Low | **Impact**: High
 
----
+#### 2B.4 `validate_folder()` branch-level tests
+- **What**: Cover every branch: invalid paths, existing folders, new subfolders with/without support, nested rejection.
+- **Files**: `tests/test_bookmarks.py`
+- **Effort**: Low | **Impact**: Medium (highest priority test gap)
 
-### 5. Import & Export (P2)
-
-#### 5.1 Browser bookmark import (HTML format)
-- **What**: Parse Netscape bookmark HTML format (exported from Chrome, Firefox, Safari) and import all URLs. This is the standard browser export format.
-- **Scope**: New module `import_html.py`, `cli.py`
-- **Effort**: Medium
-
-#### 5.2 Export vault to browser bookmark HTML
-- **What**: Export all bookmarks as a Netscape bookmark HTML file that can be imported into any browser, preserving folder structure.
-- **Scope**: New module `export.py`, `pyproject.toml`
-- **Effort**: Medium
-
-#### 5.3 OPML import/export
-- **What**: Support OPML format for interoperability with RSS readers and other bookmark tools.
-- **Scope**: New module
-- **Effort**: Low
+#### 2B.5 Network behavior tests
+- **What**: Mock HTTP 404, 500, timeouts, SSL errors, 405+GET fallback, rate-limit responses. Covers `check.py`, `fetch.py`, `http_retry.py`.
+- **Depends on**: 2A.3 (tests should cover new GET fallback)
+- **Files**: `tests/`
+- **Effort**: Medium | **Impact**: Medium
 
 ---
 
-### 6. Reliability & Observability (P2)
+## Phase 2C: New Capabilities (Do Third)
 
-#### 6.1 Structured JSON logging
-- **What**: Add `--log-format json` option for machine-readable log output, useful for monitoring batch jobs or piping into log aggregation.
-- **Scope**: `cli.py`
-- **Effort**: Low
+### Commands
 
-#### 6.2 Dry-run for destructive commands
-- **What**: Add `--dry-run` to `bookmark-reorg`, `bookmark-check --delete`, and `bookmark-update --all` so users can preview changes before applying them.
-- **Scope**: `reorg.py`, `check.py`, `update.py`
-- **Effort**: Low
+#### 2C.1 Delete bookmark command (`bookmark-delete`)
+- **What**: Delete by URL or file path. Remove note file, clean up search index and embedding store. Basic CRUD is incomplete without this.
+- **Files**: New `delete.py`, `pyproject.toml`
+- **Effort**: Low | **Impact**: High
 
-#### 6.3 Network behavior tests
-- **What**: Still missing per AGENTS.md tech debt. Test handling of HTTP 404, 500, timeouts, SSL errors, and rate-limit responses with mocked network to verify fallback behavior.
-- **Scope**: `tests/`
+#### 2C.2 Bulk update command
+- **What**: Extend `bookmark-update` with `--all` or `--folder <FOLDER>` to re-process bookmarks after changing the classification guide or LLM model.
+- **Depends on**: 2A.5 (no double scan)
+- **Files**: `update.py`
+- **Effort**: Medium | **Impact**: Medium
+
+#### 2C.3 Idempotent `bookmark --force`
+- **What**: When a bookmark already exists, `--force` overwrites instead of erroring. Removes need to know about `bookmark-update` separately.
+- **Files**: `cli.py`
+- **Effort**: Low | **Impact**: Medium
+
+### Batch Processing
+
+#### 2C.4 Parallel batch processing
+- **What**: Use `concurrent.futures.ThreadPoolExecutor` for `--file` batch mode. Add `--workers` flag (default 4). Call `collect_existing_notes()` once before pool starts.
+- **Files**: `cli.py`
+- **Effort**: Medium | **Impact**: High
+
+#### 2C.5 Batch error recovery/reporting *(new)*
+- **What**: After batch completion, output failed URLs with error reasons. Support `--retry-failed <file>` to re-process only failures.
+- **Files**: `cli.py`
+- **Effort**: Low | **Impact**: Medium
+
+### Search Enhancements
+
+#### 2C.6 Export search results (JSON, CSV)
+- **What**: Add `--format json` and `--format csv` to `bookmark-search` for scripting.
+- **Files**: `search.py`
+- **Effort**: Low | **Impact**: Medium
+
+#### 2C.7 Tag-based search filter
+- **What**: Add `--tag` flag to restrict results, complementing existing `--folder`.
+- **Files**: `search.py`, `search_index.py`
+- **Effort**: Low | **Impact**: Medium
+
+---
+
+## Phase 2D: Polish and Quality of Life (When Convenient)
+
+#### 2D.1 Wire TOML config system
+- **What**: Reintroduce `config.py`, wire into classify/summarize/embeddings/paths/search_index/check. Env var overrides for backward compat. Do as a single focused PR.
 - **Effort**: Medium
 
-#### 6.4 Property-based testing for parsers
-- **What**: Use hypothesis to fuzz frontmatter parsing, URL normalization, `slugify_filename()`, `clean_html()`, and `_MetadataParser` with random inputs to catch edge cases.
-- **Scope**: `tests/`, `pyproject.toml` (add hypothesis dev dep)
+#### 2D.2 URL normalization consistency *(new)*
+- **What**: Extract shared `normalize_url()` — strip trailing slash, remove `www.`, normalize scheme. Use in `vault_profile.py` url_index, `classify.py` `find_existing_url`, `update.py`. Prerequisite for future merge-duplicates.
+- **Effort**: Low
+
+#### 2D.3 Date-range search filter (`--after`, `--before`)
+- **What**: Filter search results by `created` date. Add `created` as an indexed column.
+- **Files**: `search.py`, `search_index.py`
+- **Effort**: Medium
+
+#### 2D.4 Browser bookmark HTML import
+- **What**: Parse Netscape bookmark HTML format (Chrome/Firefox/Safari export).
+- **Files**: New `import_html.py`, `cli.py`
+- **Effort**: Medium
+
+#### 2D.5 Progress indicators for long operations
+- **What**: Add progress bars/spinners for batch import, check, reorg --llm, embedding refresh. Simple stderr output, no external dependency.
+- **Effort**: Low
+
+#### 2D.6 Property-based testing with hypothesis
+- **What**: Fuzz frontmatter parsing, URL normalization, `slugify_filename()`, `clean_html()`.
+- **Files**: `tests/`, `pyproject.toml` (add hypothesis dev dep)
+- **Effort**: Medium
+
+#### 2D.7 Lazy vault profile caching
+- **What**: Cache `BookmarkProfile` by directory mtime. Defer until profiling shows it's needed — 2A.5 and 2C.4 address the main perf issues.
 - **Effort**: Medium
 
 ---
 
-### 7. Developer Experience (P3)
+## Backlog (Unscheduled)
 
-#### 7.1 Shell completions
-- **What**: Generate bash/zsh/fish completions for all CLI commands, either via argcomplete or static generation.
-- **Scope**: All CLI modules
-- **Effort**: Low
-
-#### 7.2 `bookmark-reorg --apply` flag
-- **What**: Currently `bookmark-reorg` only proposes moves. Add `--apply` to actually move files and update any internal references (related fields, search index).
-- **Scope**: `reorg.py`
-- **Effort**: Medium
-
-#### 7.3 Idempotent `bookmark` command
-- **What**: When a bookmark already exists, offer `--force` to overwrite/update it instead of just erroring out. Currently duplicates exit with an error, and `bookmark-update` is a separate command.
-- **Scope**: `cli.py`
-- **Effort**: Low
-
-#### 7.4 Progress indicators for long operations
-- **What**: Add progress bars or spinners for batch import, `bookmark-check`, `bookmark-reorg --llm`, and embedding refresh using simple stderr output (no external dependency).
-- **Scope**: `cli.py`, `check.py`, `reorg.py`, `search.py`
-- **Effort**: Low
+| Item | Why deferred |
+|------|-------------|
+| Open in browser (`--open`) | Trivial; users can pipe to `xdg-open` |
+| OPML import/export | Niche; HTML import covers primary use case |
+| Structured JSON logging | Only useful for production monitoring |
+| Shell completions | Nice-to-have, add anytime with argcomplete |
+| Export vault to browser HTML | Lower demand than import |
+| Merge duplicate bookmarks | Needs URL normalization (2D.2) first |
 
 ---
 
-## Priority Order
+## Priority Summary
 
-| Priority | Item | Impact | Effort |
-|----------|------|--------|--------|
-| P0 | 1.1 Fix duplicate logger in search.py | Low | Trivial |
-| P0 | 1.2 Wire or remove config.py | Medium | Medium |
-| P0 | 1.3 Fix created-date in update.py | Medium | Low |
-| P0 | 1.4 HEAD→GET fallback in check.py | Low | Low |
-| P0 | 1.5 validate_folder() branch tests | High | Low |
-| P1 | 2.1 Parallel batch processing | High | Medium |
-| P1 | 2.2 Lazy vault profile caching | Medium | Medium |
-| P1 | 2.3 Avoid double scan in update.py | Low | Low |
-| P1 | 3.1 Export search results (JSON/CSV) | Medium | Low |
-| P1 | 3.2 Open in browser | Low | Trivial |
-| P1 | 3.3 Date-range search filter | Medium | Medium |
-| P1 | 3.4 Tag-based search filter | Medium | Low |
-| P2 | 4.1 Delete bookmark command | Medium | Low |
-| P2 | 4.2 Bulk update command | Medium | Medium |
-| P2 | 4.3 Merge duplicate bookmarks | Low | Medium |
-| P2 | 4.4 Actionable bookmark-check output | Medium | Low |
-| P2 | 5.1 Browser bookmark HTML import | High | Medium |
-| P2 | 5.2 Export to browser HTML | Medium | Medium |
-| P2 | 5.3 OPML import/export | Low | Low |
-| P2 | 6.1 Structured JSON logging | Low | Low |
-| P2 | 6.2 Dry-run for destructive commands | Medium | Low |
-| P2 | 6.3 Network behavior tests | Medium | Medium |
-| P2 | 6.4 Property-based testing | Medium | Medium |
-| P3 | 7.1 Shell completions | Low | Low |
-| P3 | 7.2 bookmark-reorg --apply | Medium | Medium |
-| P3 | 7.3 Idempotent bookmark --force | Low | Low |
-| P3 | 7.4 Progress indicators | Low | Low |
+| ID | Item | Impact | Effort | Depends On |
+|----|------|--------|--------|------------|
+| ~~**2A.1**~~ | ~~Fix duplicate logger in search.py~~ | Low | Trivial | — | ✅ |
+| ~~**2A.2**~~ | ~~Fix created-date preservation~~ | High | Low | — | ✅ |
+| ~~**2A.3**~~ | ~~HEAD→GET fallback in check.py~~ | High | Low | — | ✅ |
+| ~~**2A.4**~~ | ~~Remove dead config.py~~ | Low | Trivial | — | ✅ |
+| ~~**2A.5**~~ | ~~Eliminate double vault scan~~ | Medium | Low | — | ✅ |
+| **2B.1** | Dry-run for destructive commands | High | Low | — |
+| **2B.2** | bookmark-reorg --apply | High | Medium | 2B.1 |
+| **2B.3** | bookmark-check actionable output | High | Low | 2A.3, 2B.1 |
+| **2B.4** | validate_folder() branch tests | Medium | Low | — |
+| **2B.5** | Network behavior tests | Medium | Medium | 2A.3 |
+| **2C.1** | Delete bookmark command | High | Low | — |
+| **2C.2** | Bulk update command | Medium | Medium | 2A.5 |
+| **2C.3** | Idempotent bookmark --force | Medium | Low | — |
+| **2C.4** | Parallel batch processing | High | Medium | — |
+| **2C.5** | Batch error recovery/reporting | Medium | Low | — |
+| **2C.6** | Export search results (JSON/CSV) | Medium | Low | — |
+| **2C.7** | Tag-based search filter | Medium | Low | — |
+| **2D.1** | Wire TOML config system | Medium | Medium | 2A.4 |
+| **2D.2** | URL normalization consistency | Medium | Low | — |
+| **2D.3** | Date-range search filter | Medium | Medium | — |
+| **2D.4** | Browser HTML import | Medium | Medium | — |
+| **2D.5** | Progress indicators | Low | Low | — |
+| **2D.6** | Property-based testing | Medium | Medium | — |
+| **2D.7** | Lazy vault profile caching | Low | Medium | 2A.5 |
