@@ -337,5 +337,125 @@ class BookmarkHelpersTest(unittest.TestCase):
         mocked_bookmarks_dir.assert_not_called()
 
 
+class ValidateFolderTest(unittest.TestCase):
+    """Branch-level coverage for classify.validate_folder()."""
+
+    def setUp(self) -> None:
+        from bookmark_tools.classify import validate_folder
+        self.validate_folder = validate_folder
+
+    # --- Invalid path branches ---
+
+    def test_empty_folder_falls_back_to_development(self) -> None:
+        """An empty folder string is invalid; falls back to Development."""
+        with TemporaryDirectory() as tmp:
+            folder, msg = self.validate_folder("", False, bookmarks_dir=Path(tmp))
+        self.assertEqual(folder, "Development")
+        self.assertIn("Invalid", msg)
+
+    def test_dotdot_in_path_is_rejected(self) -> None:
+        """A path containing '..' is rejected as invalid."""
+        with TemporaryDirectory() as tmp:
+            folder, msg = self.validate_folder("../outside", False, bookmarks_dir=Path(tmp))
+        self.assertEqual(folder, "Development")
+        self.assertIn("Invalid", msg)
+
+    def test_path_starting_with_dot_is_rejected(self) -> None:
+        """A path that starts with '.' is rejected as invalid."""
+        with TemporaryDirectory() as tmp:
+            folder, msg = self.validate_folder(".hidden", False, bookmarks_dir=Path(tmp))
+        self.assertEqual(folder, "Development")
+        self.assertIn("Invalid", msg)
+
+    # --- Existing folder branch ---
+
+    def test_existing_folder_returned_as_is(self) -> None:
+        """An already-existing folder is accepted without modification."""
+        with TemporaryDirectory() as tmp:
+            (Path(tmp) / "Development").mkdir()
+            folder, msg = self.validate_folder("Development", False, bookmarks_dir=Path(tmp))
+        self.assertEqual(folder, "Development")
+        self.assertEqual(msg, "")
+
+    def test_existing_subfolder_returned_as_is(self) -> None:
+        """An already-existing subfolder path is accepted."""
+        with TemporaryDirectory() as tmp:
+            (Path(tmp) / "Development" / "Python").mkdir(parents=True)
+            folder, msg = self.validate_folder(
+                "Development/Python", False, bookmarks_dir=Path(tmp)
+            )
+        self.assertEqual(folder, "Development/Python")
+        self.assertEqual(msg, "")
+
+    # --- New folder / allow_new_subfolder=False branches ---
+
+    def test_new_top_level_folder_rejected_when_no_allow(self) -> None:
+        """A new top-level folder that doesn't exist falls back to Development."""
+        with TemporaryDirectory() as tmp:
+            folder, msg = self.validate_folder(
+                "NewTopLevel", False, bookmarks_dir=Path(tmp)
+            )
+        self.assertEqual(folder, "Development")
+        self.assertIn("Rejected", msg)
+
+    def test_new_subfolder_rejected_when_allow_false(self) -> None:
+        """A new subfolder is rejected when allow_new_subfolder=False."""
+        with TemporaryDirectory() as tmp:
+            (Path(tmp) / "Development").mkdir()
+            folder, msg = self.validate_folder(
+                "Development/NewSub", False, bookmarks_dir=Path(tmp)
+            )
+        self.assertEqual(folder, "Development")
+        self.assertIn("Rejected", msg)
+
+    # --- New subfolder / allow_new_subfolder=True branches ---
+
+    def test_new_subfolder_with_sufficient_support_is_created(self) -> None:
+        """A new subfolder is accepted when 2+ related notes exist in the parent."""
+        with TemporaryDirectory() as tmp:
+            parent = Path(tmp) / "Development"
+            parent.mkdir()
+            # Two notes with 'python' in their content to provide support
+            for i in range(2):
+                note = parent / f"python-note-{i}.md"
+                note.write_text(
+                    f"---\ntitle: Python Guide {i}\ntags: [python]\n---\n",
+                    encoding="utf-8",
+                )
+            folder, msg = self.validate_folder(
+                "Development/python", True, bookmarks_dir=Path(tmp)
+            )
+        self.assertEqual(folder, "Development/python")
+        self.assertIn("Creating new subfolder", msg)
+
+    def test_new_subfolder_without_support_falls_back_to_parent(self) -> None:
+        """A new subfolder is rejected when fewer than 2 related notes exist."""
+        with TemporaryDirectory() as tmp:
+            parent = Path(tmp) / "Development"
+            parent.mkdir()
+            # Only one note — not enough support
+            (parent / "python-note.md").write_text(
+                "---\ntitle: Python Guide\ntags: [python]\n---\n",
+                encoding="utf-8",
+            )
+            folder, msg = self.validate_folder(
+                "Development/python", True, bookmarks_dir=Path(tmp)
+            )
+        self.assertEqual(folder, "Development")
+        self.assertIn("Needed 2 related notes", msg)
+
+    def test_nested_folder_rejected_when_intermediate_missing(self) -> None:
+        """A deeply nested folder is rejected when the intermediate parent doesn't exist."""
+        with TemporaryDirectory() as tmp:
+            (Path(tmp) / "Development").mkdir()
+            # Development/Sub does NOT exist, so Development/Sub/Deep is nested-rejected
+            folder, msg = self.validate_folder(
+                "Development/Sub/Deep", True, bookmarks_dir=Path(tmp)
+            )
+        # Falls back to the top-level since the parent doesn't exist
+        self.assertEqual(folder, "Development")
+        self.assertIn("Rejected nested folder", msg)
+
+
 if __name__ == "__main__":
     unittest.main()
