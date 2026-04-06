@@ -215,19 +215,28 @@ class BookmarkExistsError(Exception):
 
 def build_note(url: str, allow_new_subfolder: bool) -> tuple[Path, str, str]:
     """Build the target note path, rendered note text, and folder decision message."""
+    logger.info("Scanning vault for existing bookmarks…")
     profile = collect_existing_notes()
     existing = find_existing_url(url, profile)
     if existing:
         raise BookmarkExistsError(f"Bookmark already exists: {existing}")
+    logger.info("Fetching page content from %s…", url)
     page_data = extract_page_data(url)
+    logger.info("Page fetched: %s", page_data["title"])
     similar_notes = rank_similar_notes(page_data, profile)
+    logger.info("Classifying bookmark with LLM…")
     llm_metadata = call_llm(page_data, profile, similar_notes, allow_new_subfolder)
+    if llm_metadata:
+        logger.info("LLM classification succeeded.")
+    else:
+        logger.info("LLM unavailable; using heuristic classification.")
     metadata = llm_metadata or heuristic_classification(
         page_data, profile, similar_notes
     )
     classification_summary = (
         str(llm_metadata.get("summary", "")).strip() if llm_metadata else ""
     )
+    logger.info("Generating summary…")
     summary_override = generate_summary(
         page_data["url"],
         page_data,
@@ -236,6 +245,7 @@ def build_note(url: str, allow_new_subfolder: bool) -> tuple[Path, str, str]:
     folder, folder_message = validate_folder(
         str(metadata.get("folder", "Development")), allow_new_subfolder
     )
+    logger.info("Assigned folder: %s", folder)
     metadata = normalize_metadata(
         metadata,
         page_data,
@@ -309,7 +319,7 @@ def configure_logging(*, verbose: bool = False, quiet: bool = False) -> None:
         level = logging.ERROR
     else:
         env_level = os.environ.get("LOG_LEVEL", "").upper()
-        level = getattr(logging, env_level, logging.WARNING)
+        level = getattr(logging, env_level, logging.INFO)
     logging.basicConfig(
         format="%(levelname)s: %(message)s",
         level=level,
