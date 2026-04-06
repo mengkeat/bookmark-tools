@@ -39,9 +39,9 @@ Summary behavior at a glance:
 
 Common edit recipes:
 
-- **Tune folder/type/tags decisions:** start in `src/bookmark_tools/classify.py`.
-- **Tune summary behavior:** start in `src/bookmark_tools/summarize.py`.
-- **Tune CLI flow / dry-run output:** start in `src/bookmark_tools/cli.py`.
+- **Tune folder/type/tags decisions:** start in `bookmark_tools/classify.py`.
+- **Tune summary behavior:** start in `bookmark_tools/summarize.py`.
+- **Tune CLI flow / dry-run output:** start in `bookmark_tools/cli.py`.
 - **Verify quickly without writing files:** `uv run bookmark <URL> --dry-run`.
 
 ---
@@ -74,13 +74,13 @@ Use `uv run` to execute tools inside the project environment:
 uv run pytest tests/
 
 # Lint Python code
-uv run ruff check src tests
+uv run ruff check bookmark_tools tests
 
 # Auto-format Python code
-uv run ruff format src tests
+uv run ruff format bookmark_tools tests
 
 # Verify formatting without writing changes
-uv run ruff format --check src tests
+uv run ruff format --check bookmark_tools tests
 ```
 
 ---
@@ -97,7 +97,7 @@ Uses the `bookmark` script entry point defined in `pyproject.toml`, which calls 
 ```
 uv run python -m bookmark_tools <URL> [--dry-run] [--disallow-new-subfolder]
 ```
-Invokes `src/bookmark_tools/__main__.py` → calls `cli.main()`.
+Invokes `bookmark_tools/__main__.py` → calls `cli.main()`.
 
 | Argument | Required | Default | Description |
 |----------|----------|---------|-------------|
@@ -171,22 +171,28 @@ Start with rows marked **Mutable**. Most implementation changes should be confin
 
 | File Path | Responsibility | Key Functions/Classes | Mutability |
 |-----------|---------------|----------------------|------------|
-| `src/bookmark_tools/cli.py` | Orchestration: argument parsing, workflow coordination, summary handoff, file writing, metadata normalization, batch import (`--file`), logging configuration | `main()`, `build_note()`, `normalize_metadata()`, `_normalize_text()`, `_normalize_text_list()`, `_normalize_related_topics()`, `parse_args()`, `configure_logging()`, `_read_urls_from_file()`, `_process_single_url()` | **Mutable** (business logic) |
-| `src/bookmark_tools/fetch.py` | HTTP page fetching and HTML content extraction with retry support, HTML parser-based metadata extraction | `fetch_text(url) → (final_url, html_text)`, `extract_page_data(url) → PageData`, `search_meta()`, `clean_html()`, `_MetadataParser`, `_parse_metadata()` | Read-Only (utility) |
-| `src/bookmark_tools/classify.py` | Classification logic: LLM-based and heuristic fallback, folder validation, similarity scoring, env config, retry support | `call_llm()`, `heuristic_classification()`, `rank_similar_notes()`, `strong_similar_notes()`, `choose_folder_from_profile()`, `derive_tags()`, `derive_related_topics()`, `derive_parent_topic()`, `enrich_tags_from_similar()`, `validate_folder()`, `find_existing_url()`, `get_llm_config()`, `related_note_count()`, `SimilarNote` | **Mutable** (core business logic) |
-| `src/bookmark_tools/summarize.py` | Summary generation pipeline with explicit fallbacks, retry support, logging | `generate_summary()`, `summarize_with_tool()`, `summarize_with_llm()` | **Mutable** (business logic) |
-| `src/bookmark_tools/check.py` | Bookmark health checking: HEAD request URL validation, batch problem reporting | `check_url()`, `check_bookmarks()`, `parse_args()`, `main()` | **Mutable** (business logic) |
-| `src/bookmark_tools/http_retry.py` | HTTP retry with exponential backoff and full jitter for transient failures | `urlopen_with_retry()` | Read-Only (utility) |
-| `src/bookmark_tools/types.py` | Shared typed schemas for bookmark pipeline data | `PageData`, `BookmarkMetadata`, `NormalizedBookmarkMetadata` | Read-Only (types) |
-| `src/bookmark_tools/render.py` | Markdown note rendering with YAML frontmatter | `render_note(metadata, url, profile) → str`, `infer_summary()`, `slugify_filename()`, `uniquify_path()`, `yaml_scalar()`, `yaml_list()` | Read-Only (utility) |
-| `src/bookmark_tools/paths.py` | Configurable path resolution, timeout/size constants, `.env` loader | `get_bookmarks_dir()`, `get_search_index_path()`, `get_guide_path()`, `DEFAULT_TIMEOUT` (20s), `MAX_FETCH_BYTES` (1MB), `load_env()` | Read-Only (config) |
-| `src/bookmark_tools/vault_profile.py` | Vault introspection: reads existing notes, builds profile with schema/folders/examples/topics, URL index | `collect_existing_notes() → BookmarkProfile`, `parse_frontmatter()`, `read_frontmatter()`, `tokenize()`, `choose_schema()`, `list_existing_folders()`, `NoteProfile`, `BookmarkProfile` | Read-Only (data collection) |
-| `src/bookmark_tools/__init__.py` | Package re-export | `main` (re-exported from cli) | Read-Only |
-| `src/bookmark_tools/__main__.py` | Package runner | Calls `cli.main()` | Read-Only |
-| `src/bookmark_tools/search.py` | Search orchestration: CLI argument parsing, BM25/semantic/hybrid search, result formatting, logging | `main()`, `search_bookmarks()`, `search_bookmarks_semantic()`, `search_bookmarks_hybrid()`, `_reciprocal_rank_fusion()`, `parse_args()`, `configure_logging()` | **Mutable** (business logic) |
-| `src/bookmark_tools/search_index.py` | SQLite FTS5 index management: schema creation, BM25-weighted search, query sanitization | `rebuild_search_index()`, `update_search_index()`, `search_index()`, `SearchResult` | Read-Only (utility) |
-| `src/bookmark_tools/search_documents.py` | Document collection: reads vault notes and normalizes frontmatter + body into `SearchDocument` records | `collect_search_documents()`, `SearchDocument` | Read-Only (utility) |
-| `src/bookmark_tools/embeddings.py` | Embedding-based semantic search: OpenAI embedding API, vector storage in SQLite, cosine similarity ranking, retry support | `embed_texts()`, `build_embedding_text()`, `refresh_embeddings()`, `semantic_search()`, `EmbeddingMatch` | Read-Only (utility) |
+| `bookmark_tools/cli.py` | Orchestration: argument parsing, workflow coordination, summary handoff, file writing, metadata normalization, batch import (`--file`), logging configuration | `main()`, `build_note()`, `normalize_metadata()`, `_normalize_text()`, `_normalize_text_list()`, `_normalize_related_topics()`, `parse_args()`, `configure_logging()`, `_read_urls_from_file()`, `_process_single_url()` | **Mutable** (business logic) |
+| `bookmark_tools/fetch.py` | HTTP page fetching and HTML content extraction with retry support, HTML parser-based metadata extraction | `fetch_text(url) → (final_url, html_text)`, `extract_page_data(url) → PageData`, `search_meta()`, `clean_html()`, `_MetadataParser`, `_parse_metadata()` | Read-Only (utility) |
+| `bookmark_tools/classify.py` | Classification logic: LLM-based and heuristic fallback, folder validation, similarity scoring, env config, retry support | `call_llm()`, `heuristic_classification()`, `rank_similar_notes()`, `strong_similar_notes()`, `choose_folder_from_profile()`, `derive_tags()`, `derive_related_topics()`, `derive_parent_topic()`, `enrich_tags_from_similar()`, `validate_folder()`, `find_existing_url()`, `get_llm_config()`, `related_note_count()`, `SimilarNote` | **Mutable** (core business logic) |
+| `bookmark_tools/summarize.py` | Summary generation pipeline with explicit fallbacks, retry support, logging | `generate_summary()`, `summarize_with_tool()`, `summarize_with_llm()` | **Mutable** (business logic) |
+| `bookmark_tools/check.py` | Bookmark health checking: HEAD request URL validation, batch problem reporting | `check_url()`, `check_bookmarks()`, `parse_args()`, `main()` | **Mutable** (business logic) |
+| `bookmark_tools/http_retry.py` | HTTP retry with exponential backoff and full jitter for transient failures | `urlopen_with_retry()` | Read-Only (utility) |
+| `bookmark_tools/types.py` | Shared typed schemas for bookmark pipeline data | `PageData`, `BookmarkMetadata`, `NormalizedBookmarkMetadata` | Read-Only (types) |
+| `bookmark_tools/render.py` | Markdown note rendering with YAML frontmatter | `render_note(metadata, url, profile) → str`, `infer_summary()`, `slugify_filename()`, `uniquify_path()`, `yaml_scalar()`, `yaml_list()` | Read-Only (utility) |
+| `bookmark_tools/paths.py` | Configurable path resolution, timeout/size constants, `.env` loader | `get_bookmarks_dir()`, `get_search_index_path()`, `get_guide_path()`, `DEFAULT_TIMEOUT` (20s), `MAX_FETCH_BYTES` (1MB), `load_env()` | Read-Only (config) |
+| `bookmark_tools/vault_profile.py` | Vault introspection: reads existing notes, builds profile with schema/folders/examples/topics, URL index | `collect_existing_notes() → BookmarkProfile`, `parse_frontmatter()`, `read_frontmatter()`, `tokenize()`, `choose_schema()`, `list_existing_folders()`, `NoteProfile`, `BookmarkProfile` | Read-Only (data collection) |
+| `bookmark_tools/__init__.py` | Package re-export | `main` (re-exported from cli) | Read-Only |
+| `bookmark_tools/__main__.py` | Package runner | Calls `cli.main()` | Read-Only |
+| `bookmark_tools/search.py` | Search orchestration: CLI argument parsing, BM25/semantic/hybrid search, result formatting, logging | `main()`, `search_bookmarks()`, `search_bookmarks_semantic()`, `search_bookmarks_hybrid()`, `_reciprocal_rank_fusion()`, `parse_args()`, `configure_logging()` | **Mutable** (business logic) |
+| `bookmark_tools/search_index.py` | SQLite FTS5 index management: schema creation, BM25-weighted search, query sanitization | `rebuild_search_index()`, `update_search_index()`, `search_index()`, `SearchResult` | Read-Only (utility) |
+| `bookmark_tools/search_documents.py` | Document collection: reads vault notes and normalizes frontmatter + body into `SearchDocument` records | `collect_search_documents()`, `SearchDocument` | Read-Only (utility) |
+| `bookmark_tools/embeddings.py` | Embedding-based semantic search: OpenAI embedding API, vector storage in SQLite, cosine similarity ranking, retry support | `embed_texts()`, `build_embedding_text()`, `refresh_embeddings()`, `semantic_search()`, `EmbeddingMatch` | Read-Only (utility) |
+| `bookmark_tools/link.py` | Link management: URL validation, link extraction, and bookmark link operations | **Mutable** (business logic) |
+| `bookmark_tools/reorg.py` | Bookmark reorganization: folder restructuring, batch moves, vault reorganization | **Mutable** (business logic) |
+| `bookmark_tools/stats.py` | Bookmark statistics: analytics, metrics collection, vault statistics reporting | **Mutable** (business logic) |
+| `bookmark_tools/tag_normalize.py` | Tag normalization: tag standardization, deduplication, and consistency enforcement | **Mutable** (business logic) |
+| `bookmark_tools/update.py` | Bookmark updates: URL updates, metadata refresh, batch update operations | **Mutable** (business logic) |
+| `bookmark_tools/config/` | Configuration files and settings | Read-Only (config) |
 | `tests/test_bookmarks.py` | Unit tests (unittest) for helpers + summary pipeline behavior | `BookmarkHelpersTest` (14 tests) | Test file |
 | `tests/test_bookmark_search.py` | Unit tests (unittest) for search: document collection, BM25 ranking, folder filtering | `BookmarkSearchTest` | Test file |
 | `tests/test_embeddings.py` | Unit tests (unittest) for embeddings: vector helpers, semantic search, RRF, hybrid search | `EmbeddingHelpersTest`, `EmbeddingIndexTest`, `ReciprocalRankFusionTest`, `HybridSearchTest` | Test file |
@@ -194,6 +200,15 @@ Start with rows marked **Mutable**. Most implementation changes should be confin
 | `tests/test_http_retry.py` | Unit tests for HTTP retry: exponential backoff, jitter, retryable codes, non-retryable errors | `HttpRetryTest` | Test file |
 | `tests/test_fetch.py` | Unit tests for fetch module: metadata parsing, HTML cleaning, page data extraction | `FetchTest` | Test file |
 | `tests/test_check.py` | Unit tests for bookmark-check: URL checking, problem detection, edge cases | `BookmarkCheckTest` | Test file |
+| `tests/test_link.py` | Unit tests for link module: URL validation, link operations | Test file |
+| `tests/test_render.py` | Unit tests for render module: note rendering, frontmatter generation | Test file |
+| `tests/test_reorg.py` | Unit tests for reorg module: bookmark reorganization, folder moves | Test file |
+| `tests/test_stats.py` | Unit tests for stats module: statistics collection, metrics | Test file |
+| `tests/test_tag_normalize.py` | Unit tests for tag normalization: tag standardization, deduplication | Test file |
+| `tests/test_update.py` | Unit tests for update module: bookmark updates, metadata refresh | Test file |
+| `tests/test_web_bookmarks.py` | Unit tests for web bookmark integration | Test file |
+| `tests/test_web_stats.py` | Unit tests for web statistics integration | Test file |
+| `tests/README.md` | Test documentation and guidelines | Documentation |
 
 ---
 
