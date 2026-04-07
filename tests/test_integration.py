@@ -597,6 +597,68 @@ class BatchImportTest(unittest.TestCase):
             self.assertEqual(exit_code, 0)
 
 
+class ParallelBatchTest(unittest.TestCase):
+    """Tests for --workers parallel batch processing."""
+
+    def test_parallel_batch_processes_urls(self) -> None:
+        """--file with --workers processes URLs in parallel."""
+        with TemporaryDirectory() as tmp:
+            vault_dir, bookmarks_dir = _setup_vault(tmp)
+            url_file = Path(tmp) / "urls.txt"
+            url_file.write_text(
+                "https://example.com/par-1\nhttps://example.com/par-2\nhttps://example.com/par-3\n",
+                encoding="utf-8",
+            )
+            env = {
+                "VAULT_PATH": str(vault_dir),
+                "BOOKMARKS_DIR": str(bookmarks_dir),
+            }
+            with (
+                patch.dict(os.environ, env, clear=True),
+                patch(
+                    "sys.argv",
+                    ["bookmark", "--file", str(url_file), "--dry-run", "--workers", "2"],
+                ),
+                patch(
+                    "bookmark_tools.fetch.urllib.request.urlopen",
+                    side_effect=lambda req, **kw: _fake_urlopen(req, **kw),
+                ),
+                patch("bookmark_tools.summarize.shutil.which", return_value=None),
+            ):
+                exit_code = main()
+
+            self.assertEqual(exit_code, 0)
+
+    def test_workers_1_runs_sequentially(self) -> None:
+        """--workers 1 processes URLs sequentially."""
+        with TemporaryDirectory() as tmp:
+            vault_dir, bookmarks_dir = _setup_vault(tmp)
+            url_file = Path(tmp) / "urls.txt"
+            url_file.write_text(
+                "https://example.com/seq-1\nhttps://example.com/seq-2\n",
+                encoding="utf-8",
+            )
+            env = {
+                "VAULT_PATH": str(vault_dir),
+                "BOOKMARKS_DIR": str(bookmarks_dir),
+            }
+            with (
+                patch.dict(os.environ, env, clear=True),
+                patch(
+                    "sys.argv",
+                    ["bookmark", "--file", str(url_file), "--dry-run", "--workers", "1"],
+                ),
+                patch(
+                    "bookmark_tools.fetch.urllib.request.urlopen",
+                    side_effect=lambda req, **kw: _fake_urlopen(req, **kw),
+                ),
+                patch("bookmark_tools.summarize.shutil.which", return_value=None),
+            ):
+                exit_code = main()
+
+            self.assertEqual(exit_code, 0)
+
+
 class ForceOverwriteTest(unittest.TestCase):
     """Tests for --force idempotent bookmark creation."""
 

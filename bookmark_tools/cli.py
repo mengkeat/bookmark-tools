@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import concurrent.futures
 import logging
 import os
 import re
@@ -307,6 +308,12 @@ def parse_args() -> argparse.Namespace:
         help="Save a cleaned copy of the page content alongside the bookmark note",
     )
     parser.add_argument(
+        "--workers",
+        type=int,
+        default=None,
+        help="Number of parallel workers for --file batch mode (default: 4)",
+    )
+    parser.add_argument(
         "--verbose",
         "-v",
         action="store_true",
@@ -443,17 +450,38 @@ def main() -> int:
             logger.error("No URLs found in %s", args.file)
             return 1
         allow_new = not args.disallow_new_subfolder
-        failures = sum(
-            _process_single_url(
-                url,
-                allow_new_subfolder=allow_new,
-                dry_run=args.dry_run,
-                force=args.force,
-                interactive=args.interactive,
-                archive=args.archive,
+        workers = args.workers
+        if workers is None:
+            workers = 1 if args.interactive else 4
+        if workers > 1 and not args.interactive:
+            with concurrent.futures.ThreadPoolExecutor(
+                max_workers=workers
+            ) as executor:
+                futures = [
+                    executor.submit(
+                        _process_single_url,
+                        url,
+                        allow_new_subfolder=allow_new,
+                        dry_run=args.dry_run,
+                        force=args.force,
+                        archive=args.archive,
+                    )
+                    for url in urls
+                ]
+                results = [f.result() for f in futures]
+            failures = sum(results)
+        else:
+            failures = sum(
+                _process_single_url(
+                    url,
+                    allow_new_subfolder=allow_new,
+                    dry_run=args.dry_run,
+                    force=args.force,
+                    interactive=args.interactive,
+                    archive=args.archive,
+                )
+                for url in urls
             )
-            for url in urls
-        )
         total = len(urls)
         print(f"\nProcessed {total - failures}/{total} URLs successfully.")
         return 1 if failures == total else 0

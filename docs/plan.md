@@ -104,10 +104,11 @@ Make half-built features actually useful. Depends on 2A being done.
 
 ### Batch Processing
 
-#### 2C.4 Parallel batch processing
+#### 2C.4 Parallel batch processing ✅
 - **What**: Use `concurrent.futures.ThreadPoolExecutor` for `--file` batch mode. Add `--workers` flag (default 4). Call `collect_existing_notes()` once before pool starts.
 - **Files**: `cli.py`
 - **Effort**: Medium | **Impact**: High
+- **Resolved**: added `--workers` flag with ThreadPoolExecutor; falls back to sequential for interactive mode
 
 #### 2C.5 Batch error recovery/reporting *(new)*
 - **What**: After batch completion, output failed URLs with error reasons. Support `--retry-failed <file>` to re-process only failures.
