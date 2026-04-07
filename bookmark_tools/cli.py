@@ -213,12 +213,14 @@ class BookmarkExistsError(Exception):
     """Raised when a bookmark for the given URL already exists."""
 
 
-def build_note(url: str, allow_new_subfolder: bool) -> tuple[Path, str, str]:
+def build_note(
+    url: str, allow_new_subfolder: bool, *, force: bool = False
+) -> tuple[Path, str, str]:
     """Build the target note path, rendered note text, and folder decision message."""
     logger.info("Scanning vault for existing bookmarks…")
     profile = collect_existing_notes()
     existing = find_existing_url(url, profile)
-    if existing:
+    if existing and not force:
         raise BookmarkExistsError(f"Bookmark already exists: {existing}")
     logger.info("Fetching page content from %s…", url)
     page_data = extract_page_data(url)
@@ -256,9 +258,12 @@ def build_note(url: str, allow_new_subfolder: bool) -> tuple[Path, str, str]:
         summary_override=summary_override,
     )
     bookmarks_dir = get_bookmarks_dir()
-    target_path = uniquify_path(
-        (bookmarks_dir / folder) / slugify_filename(str(metadata["title"]))
-    )
+    if existing and force:
+        target_path = existing
+    else:
+        target_path = uniquify_path(
+            (bookmarks_dir / folder) / slugify_filename(str(metadata["title"]))
+        )
     return target_path, render_note(metadata, page_data["url"], profile), folder_message
 
 
@@ -284,6 +289,11 @@ def parse_args() -> argparse.Namespace:
         "--disallow-new-subfolder",
         action="store_true",
         help="Force placement into existing folders only",
+    )
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Overwrite if a bookmark for the URL already exists",
     )
     parser.add_argument(
         "--interactive",
@@ -375,12 +385,15 @@ def _process_single_url(
     *,
     allow_new_subfolder: bool,
     dry_run: bool,
+    force: bool = False,
     interactive: bool = False,
     archive: bool = False,
 ) -> int:
     """Process one URL through the bookmark pipeline. Returns 0 on success, 1 on error."""
     try:
-        target_path, note_text, folder_message = build_note(url, allow_new_subfolder)
+        target_path, note_text, folder_message = build_note(
+            url, allow_new_subfolder, force=force
+        )
     except BookmarkExistsError as exc:
         logger.warning("%s — skipping %s", exc, url)
         return 1
@@ -435,6 +448,7 @@ def main() -> int:
                 url,
                 allow_new_subfolder=allow_new,
                 dry_run=args.dry_run,
+                force=args.force,
                 interactive=args.interactive,
                 archive=args.archive,
             )
@@ -452,6 +466,7 @@ def main() -> int:
         args.url,
         allow_new_subfolder=not args.disallow_new_subfolder,
         dry_run=args.dry_run,
+        force=args.force,
         interactive=args.interactive,
         archive=args.archive,
     )

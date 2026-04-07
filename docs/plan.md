@@ -96,10 +96,11 @@ Make half-built features actually useful. Depends on 2A being done.
 - **Effort**: Medium | **Impact**: Medium
 - **Resolved**: added `--all` and `--folder` flags with `bulk_update()` function
 
-#### 2C.3 Idempotent `bookmark --force`
+#### 2C.3 Idempotent `bookmark --force` ✅
 - **What**: When a bookmark already exists, `--force` overwrites instead of erroring. Removes need to know about `bookmark-update` separately.
 - **Files**: `cli.py`
 - **Effort**: Low | **Impact**: Medium
+- **Resolved**: added `--force` flag to `bookmark` CLI; overwrites existing note at same path
 
 ### Batch Processing
 

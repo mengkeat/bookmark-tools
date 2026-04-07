@@ -597,5 +597,57 @@ class BatchImportTest(unittest.TestCase):
             self.assertEqual(exit_code, 0)
 
 
+class ForceOverwriteTest(unittest.TestCase):
+    """Tests for --force idempotent bookmark creation."""
+
+    def test_force_overwrites_existing_bookmark(self) -> None:
+        """With force=True, build_note overwrites instead of raising."""
+        with TemporaryDirectory() as tmp:
+            vault_dir, bookmarks_dir = _setup_vault(tmp)
+            existing_url = "https://example.com/intro-ml"
+            existing_note = bookmarks_dir / "ML-AI" / "intro-to-ml.md"
+            self.assertTrue(existing_note.exists())
+
+            env = {
+                "VAULT_PATH": str(vault_dir),
+                "BOOKMARKS_DIR": str(bookmarks_dir),
+            }
+            with (
+                patch.dict(os.environ, env, clear=True),
+                patch(
+                    "bookmark_tools.fetch.urllib.request.urlopen",
+                    side_effect=lambda req, **kw: _fake_urlopen(req, **kw),
+                ),
+                patch("bookmark_tools.summarize.shutil.which", return_value=None),
+            ):
+                target_path, note_text, _ = build_note(
+                    existing_url, allow_new_subfolder=True, force=True
+                )
+
+            # Should target the existing note path
+            self.assertEqual(target_path, existing_note)
+            # Should contain updated content from the re-fetch
+            self.assertIn("---", note_text)
+            self.assertIn("Summary:", note_text)
+
+    def test_without_force_raises_on_duplicate(self) -> None:
+        """Without force, build_note raises BookmarkExistsError."""
+        with TemporaryDirectory() as tmp:
+            vault_dir, bookmarks_dir = _setup_vault(tmp)
+            env = {
+                "VAULT_PATH": str(vault_dir),
+                "BOOKMARKS_DIR": str(bookmarks_dir),
+            }
+            with (
+                patch.dict(os.environ, env, clear=True),
+            ):
+                with self.assertRaises(BookmarkExistsError):
+                    build_note(
+                        "https://example.com/intro-ml",
+                        allow_new_subfolder=True,
+                        force=False,
+                    )
+
+
 if __name__ == "__main__":
     unittest.main()
