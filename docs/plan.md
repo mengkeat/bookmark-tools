@@ -83,10 +83,11 @@ Make half-built features actually useful. Depends on 2A being done.
 
 ### Commands
 
-#### 2C.1 Delete bookmark command (`bookmark-delete`)
+#### 2C.1 Delete bookmark command (`bookmark-delete`) ✅
 - **What**: Delete by URL or file path. Remove note file, clean up search index and embedding store. Basic CRUD is incomplete without this.
 - **Files**: New `delete.py`, `pyproject.toml`
 - **Effort**: Low | **Impact**: High
+- **Resolved**: implemented `bookmark-delete` CLI with search index + embedding cleanup and empty dir removal
 
 #### 2C.2 Bulk update command
 - **What**: Extend `bookmark-update` with `--all` or `--folder <FOLDER>` to re-process bookmarks after changing the classification guide or LLM model.
