@@ -110,10 +110,11 @@ Make half-built features actually useful. Depends on 2A being done.
 - **Effort**: Medium | **Impact**: High
 - **Resolved**: added `--workers` flag with ThreadPoolExecutor; falls back to sequential for interactive mode
 
-#### 2C.5 Batch error recovery/reporting *(new)*
+#### 2C.5 Batch error recovery/reporting ✅ *(new)*
 - **What**: After batch completion, output failed URLs with error reasons. Support `--retry-failed <file>` to re-process only failures.
 - **Files**: `cli.py`
 - **Effort**: Low | **Impact**: Medium
+- **Resolved**: batch failures printed with reasons; `--retry-failed` flag reads URLs from file
 
 ### Search Enhancements
 

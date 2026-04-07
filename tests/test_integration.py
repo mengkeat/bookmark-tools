@@ -597,6 +597,79 @@ class BatchImportTest(unittest.TestCase):
             self.assertEqual(exit_code, 0)
 
 
+class BatchErrorReportingTest(unittest.TestCase):
+    """Tests for batch error recovery and reporting."""
+
+    def test_batch_reports_failed_urls(self, ) -> None:
+        """Batch processing prints failed URLs with reasons."""
+        with TemporaryDirectory() as tmp:
+            vault_dir, bookmarks_dir = _setup_vault(tmp)
+            url_file = Path(tmp) / "urls.txt"
+            # intro-ml already exists, so it should be reported as a failure
+            url_file.write_text(
+                "https://example.com/intro-ml\nhttps://example.com/new-page\n",
+                encoding="utf-8",
+            )
+            env = {
+                "VAULT_PATH": str(vault_dir),
+                "BOOKMARKS_DIR": str(bookmarks_dir),
+            }
+            captured: list[str] = []
+            original_print = __builtins__["print"] if isinstance(__builtins__, dict) else __builtins__.print
+            def capture_print(*args, **kwargs):
+                captured.append(" ".join(str(a) for a in args))
+                original_print(*args, **kwargs)
+
+            with (
+                patch.dict(os.environ, env, clear=True),
+                patch(
+                    "sys.argv",
+                    ["bookmark", "--file", str(url_file), "--workers", "1"],
+                ),
+                patch(
+                    "bookmark_tools.fetch.urllib.request.urlopen",
+                    side_effect=lambda req, **kw: _fake_urlopen(req, **kw),
+                ),
+                patch("bookmark_tools.summarize.shutil.which", return_value=None),
+                patch("builtins.print", side_effect=capture_print),
+            ):
+                exit_code = main()
+
+            output = "\n".join(captured)
+            self.assertEqual(exit_code, 0)
+            self.assertIn("Failed URLs (1):", output)
+            self.assertIn("intro-ml", output)
+
+    def test_retry_failed_reads_urls_file(self) -> None:
+        """--retry-failed reads URLs from the given file."""
+        with TemporaryDirectory() as tmp:
+            vault_dir, bookmarks_dir = _setup_vault(tmp)
+            retry_file = Path(tmp) / "retry.txt"
+            retry_file.write_text(
+                "https://example.com/retry-page\n",
+                encoding="utf-8",
+            )
+            env = {
+                "VAULT_PATH": str(vault_dir),
+                "BOOKMARKS_DIR": str(bookmarks_dir),
+            }
+            with (
+                patch.dict(os.environ, env, clear=True),
+                patch(
+                    "sys.argv",
+                    ["bookmark", "--retry-failed", str(retry_file), "--dry-run"],
+                ),
+                patch(
+                    "bookmark_tools.fetch.urllib.request.urlopen",
+                    side_effect=lambda req, **kw: _fake_urlopen(req, **kw),
+                ),
+                patch("bookmark_tools.summarize.shutil.which", return_value=None),
+            ):
+                exit_code = main()
+
+            self.assertEqual(exit_code, 0)
+
+
 class ParallelBatchTest(unittest.TestCase):
     """Tests for --workers parallel batch processing."""
 

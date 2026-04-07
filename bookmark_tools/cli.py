@@ -314,6 +314,13 @@ def parse_args() -> argparse.Namespace:
         help="Number of parallel workers for --file batch mode (default: 4)",
     )
     parser.add_argument(
+        "--retry-failed",
+        type=str,
+        default=None,
+        metavar="FILE",
+        help="Re-process only the URLs listed in a previous failures file",
+    )
+    parser.add_argument(
         "--verbose",
         "-v",
         action="store_true",
@@ -387,6 +394,16 @@ def _save_archive(target_path: Path, content: str) -> Path:
     return archive_path
 
 
+class BatchFailure:
+    """Record of a failed URL during batch processing."""
+
+    __slots__ = ("url", "reason")
+
+    def __init__(self, url: str, reason: str) -> None:
+        self.url = url
+        self.reason = reason
+
+
 def _process_single_url(
     url: str,
     *,
@@ -395,6 +412,7 @@ def _process_single_url(
     force: bool = False,
     interactive: bool = False,
     archive: bool = False,
+    failures_list: list[BatchFailure] | None = None,
 ) -> int:
     """Process one URL through the bookmark pipeline. Returns 0 on success, 1 on error."""
     try:
@@ -403,11 +421,14 @@ def _process_single_url(
         )
     except BookmarkExistsError as exc:
         logger.warning("%s — skipping %s", exc, url)
+        if failures_list is not None:
+            failures_list.append(BatchFailure(url, str(exc)))
         return 1
     except Exception as exc:
-        logger.warning(
-            "Failed to process %s (%s: %s)", url, exc.__class__.__name__, exc
-        )
+        reason = f"{exc.__class__.__name__}: {exc}"
+        logger.warning("Failed to process %s (%s)", url, reason)
+        if failures_list is not None:
+            failures_list.append(BatchFailure(url, reason))
         return 1
     if dry_run:
         print(f"Target: {target_path}")
@@ -444,12 +465,14 @@ def main() -> int:
     args = parse_args()
     configure_logging(verbose=args.verbose, quiet=args.quiet)
 
-    if args.file:
-        urls = _read_urls_from_file(args.file)
+    batch_file = args.retry_failed or args.file
+    if batch_file:
+        urls = _read_urls_from_file(batch_file)
         if not urls:
-            logger.error("No URLs found in %s", args.file)
+            logger.error("No URLs found in %s", batch_file)
             return 1
         allow_new = not args.disallow_new_subfolder
+        batch_failures: list[BatchFailure] = []
         workers = args.workers
         if workers is None:
             workers = 1 if args.interactive else 4
@@ -465,13 +488,14 @@ def main() -> int:
                         dry_run=args.dry_run,
                         force=args.force,
                         archive=args.archive,
+                        failures_list=batch_failures,
                     )
                     for url in urls
                 ]
                 results = [f.result() for f in futures]
-            failures = sum(results)
+            failure_count = sum(results)
         else:
-            failures = sum(
+            failure_count = sum(
                 _process_single_url(
                     url,
                     allow_new_subfolder=allow_new,
@@ -479,12 +503,17 @@ def main() -> int:
                     force=args.force,
                     interactive=args.interactive,
                     archive=args.archive,
+                    failures_list=batch_failures,
                 )
                 for url in urls
             )
         total = len(urls)
-        print(f"\nProcessed {total - failures}/{total} URLs successfully.")
-        return 1 if failures == total else 0
+        print(f"\nProcessed {total - failure_count}/{total} URLs successfully.")
+        if batch_failures:
+            print(f"\nFailed URLs ({len(batch_failures)}):")
+            for failure in batch_failures:
+                print(f"  {failure.url}  — {failure.reason}")
+        return 1 if failure_count == total else 0
 
     if not args.url:
         logger.error("Either a URL argument or --file is required.")
