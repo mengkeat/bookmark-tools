@@ -8,8 +8,9 @@ CLI tools for fetching, classifying, summarizing, and searching bookmarks in an 
 - **Batch import**: Import multiple URLs from a file or stdin with `--file`/`-f`.
 - **Interactive mode**: Review and confirm classification before writing with `--interactive`/`-i`.
 - **Content archiving**: Save a cleaned copy of page content alongside the bookmark with `--archive`.
-- **Bookmark update**: Re-fetch and re-classify existing bookmarks with `bookmark-update`, preserving creation date.
-- **Search**: BM25 keyword search, semantic vector search, or hybrid search with context snippets.
+- **Bookmark update**: Re-fetch and re-classify existing bookmarks with `bookmark-update`, preserving creation date. Supports `--all` and `--folder` for bulk updates.
+- **Bookmark deletion**: Delete bookmarks by URL or file path with `bookmark-delete`, cleaning up search index and embeddings.
+- **Search**: BM25 keyword search, semantic vector search, or hybrid search with context snippets. Filter by `--tag`, export as JSON/CSV.
 - **Link health checking**: Validate all bookmarked URLs with `bookmark-check` to find dead links.
 - **Vault statistics**: View bookmark counts, tag distribution, and folder stats with `bookmark-stats`.
 - **Folder reorganization**: Propose folder reclassifications with `bookmark-reorg`.
@@ -88,46 +89,63 @@ cp .env.example .env
 # Single URL
 uv run bookmark <URL> [--dry-run] [--interactive] [--archive]
 
-# Batch import from file
-uv run bookmark --file urls.txt [--dry-run]
+# Overwrite an existing bookmark
+uv run bookmark <URL> --force
+
+# Batch import from file (parallel by default, 4 workers)
+uv run bookmark --file urls.txt [--dry-run] [--workers <N>]
 
 # Batch import from stdin
 cat urls.txt | uv run bookmark --file -
+
+# Retry only the URLs that failed in a previous batch
+uv run bookmark --retry-failed failed-urls.txt
 ```
 
 | Argument | Description |
 |---|---|
 | `<URL>` | Web page URL to fetch and classify (required) |
 | `--file`, `-f` | Read URLs from a file (one per line); use `-` for stdin |
+| `--force` | Overwrite if a bookmark for the URL already exists |
 | `--dry-run` | Print the proposed note without writing it to disk |
 | `--interactive`, `-i` | Review and confirm classification before writing |
 | `--archive` | Save a cleaned copy of the page content alongside the note |
 | `--disallow-new-subfolder` | Restrict placement to existing folders only |
+| `--workers` | Number of parallel workers for batch mode (default: 4) |
+| `--retry-failed` | Re-process only the URLs listed in a previous failures file |
 | `--verbose`, `-v` | Enable verbose (debug) logging output |
 | `--quiet`, `-q` | Suppress all logging output except errors |
+
+After a batch run, any failed URLs are printed with their error reasons so you can save them to a file and retry with `--retry-failed`.
 
 ### Search bookmarks
 
 ```bash
 # Keyword search (BM25)
-uv run bookmark-search <QUERY> [--folder <FOLDER>] [--limit <N>] [--rebuild]
+uv run bookmark-search <QUERY> [--folder <FOLDER>] [--tag <TAG>] [--limit <N>]
 
 # Semantic search (embeddings)
 uv run bookmark-search <QUERY> --semantic [--threshold <FLOAT>] [--limit <N>]
 
 # Hybrid search (BM25 + semantic via Reciprocal Rank Fusion)
 uv run bookmark-search <QUERY> --hybrid [--threshold <FLOAT>] [--limit <N>]
+
+# Export results as JSON or CSV for scripting
+uv run bookmark-search <QUERY> --format json
+uv run bookmark-search <QUERY> --format csv
 ```
 
 | Argument | Description |
 |---|---|
 | `<QUERY>` | Search query text (required) |
 | `--folder` | Restrict to a folder and its subfolders (e.g., `ML-AI`) |
+| `--tag` | Restrict results to bookmarks with the given tag |
 | `--limit` | Max results (default: 10) |
 | `--rebuild` | Force a full FTS5 index rebuild |
 | `--semantic` | Use embedding-based semantic search |
 | `--hybrid` | Combine BM25 + semantic via Reciprocal Rank Fusion |
 | `--threshold` | Min similarity for semantic/hybrid (default: 0.40) |
+| `--format` | Output format: `text` (default), `json`, or `csv` |
 
 ### Check bookmark health
 
@@ -144,10 +162,30 @@ uv run bookmark-check [--timeout <N>] [--verbose] [--quiet]
 ### Update an existing bookmark
 
 ```bash
+# Update a single bookmark
 uv run bookmark-update <URL> [--dry-run] [--verbose] [--quiet]
+
+# Bulk update all bookmarks
+uv run bookmark-update --all [--dry-run]
+
+# Bulk update a specific folder
+uv run bookmark-update --folder ML-AI [--dry-run]
 ```
 
-Re-fetches and re-classifies an existing bookmark while preserving its file path and original creation date.
+Re-fetches and re-classifies existing bookmarks while preserving file paths and original creation dates. Use `--all` or `--folder` to re-process bookmarks in bulk after changing your classification guide or LLM model.
+
+### Delete a bookmark
+
+```bash
+uv run bookmark-delete <URL-or-PATH> [--dry-run] [--verbose] [--quiet]
+```
+
+Deletes a bookmark by URL or file path. Removes the note file, cleans up the search index and embedding store, and removes empty parent directories.
+
+| Argument | Description |
+|---|---|
+| `<URL-or-PATH>` | URL or file path of the bookmark to delete (required) |
+| `--dry-run` | Print what would be deleted without removing it |
 
 ### Vault statistics
 
