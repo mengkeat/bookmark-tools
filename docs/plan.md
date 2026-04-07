@@ -79,7 +79,7 @@ Make half-built features actually useful. Depends on 2A being done.
 
 ---
 
-## Phase 2C: New Capabilities (Do Third)
+## Phase 2C: New Capabilities ✅ DONE
 
 ### Commands
 
@@ -124,10 +124,11 @@ Make half-built features actually useful. Depends on 2A being done.
 - **Effort**: Low | **Impact**: Medium
 - **Resolved**: added `--format` flag with text/json/csv output formatters
 
-#### 2C.7 Tag-based search filter
+#### 2C.7 Tag-based search filter ✅
 - **What**: Add `--tag` flag to restrict results, complementing existing `--folder`.
 - **Files**: `search.py`, `search_index.py`
 - **Effort**: Low | **Impact**: Medium
+- **Resolved**: added `--tag` flag with LIKE-based tag filtering in FTS5 queries
 
 ---
 
@@ -193,13 +194,13 @@ Make half-built features actually useful. Depends on 2A being done.
 | ~~**2B.3**~~ | ~~bookmark-check actionable output~~ | High | Low | 2A.3, 2B.1 | ✅ |
 | ~~**2B.4**~~ | ~~validate_folder() branch tests~~ | Medium | Low | — | ✅ |
 | ~~**2B.5**~~ | ~~Network behavior tests~~ | Medium | Medium | 2A.3 | ✅ |
-| **2C.1** | Delete bookmark command | High | Low | — |
-| **2C.2** | Bulk update command | Medium | Medium | 2A.5 |
-| **2C.3** | Idempotent bookmark --force | Medium | Low | — |
-| **2C.4** | Parallel batch processing | High | Medium | — |
-| **2C.5** | Batch error recovery/reporting | Medium | Low | — |
-| **2C.6** | Export search results (JSON/CSV) | Medium | Low | — |
-| **2C.7** | Tag-based search filter | Medium | Low | — |
+| ~~**2C.1**~~ | ~~Delete bookmark command~~ | High | Low | — | ✅ |
+| ~~**2C.2**~~ | ~~Bulk update command~~ | Medium | Medium | 2A.5 | ✅ |
+| ~~**2C.3**~~ | ~~Idempotent bookmark --force~~ | Medium | Low | — | ✅ |
+| ~~**2C.4**~~ | ~~Parallel batch processing~~ | High | Medium | — | ✅ |
+| ~~**2C.5**~~ | ~~Batch error recovery/reporting~~ | Medium | Low | — | ✅ |
+| ~~**2C.6**~~ | ~~Export search results (JSON/CSV)~~ | Medium | Low | — | ✅ |
+| ~~**2C.7**~~ | ~~Tag-based search filter~~ | Medium | Low | — | ✅ |
 | **2D.1** | Wire TOML config system | Medium | Medium | 2A.4 |
 | **2D.2** | URL normalization consistency | Medium | Low | — |
 | **2D.3** | Date-range search filter | Medium | Medium | — |

@@ -198,6 +198,7 @@ def search_index(
     *,
     database_path: Path | None = None,
     folder: str | None = None,
+    tag: str | None = None,
     limit: int = 10,
 ) -> list[SearchResult]:
     """Query the FTS5 index and return BM25-ranked bookmark matches."""
@@ -210,6 +211,11 @@ def search_index(
     if normalized_folder:
         where_clauses.append("(folder = ? OR folder LIKE ?)")
         parameters.extend([normalized_folder, f"{normalized_folder}/%"])
+
+    if tag:
+        normalized_tag = tag.strip().lower()
+        where_clauses.append("tags LIKE ?")
+        parameters.append(f"%{normalized_tag}%")
 
     parameters.append(limit)
     bm25_weight_sql = ", ".join(str(weight) for weight in BM25_WEIGHTS)

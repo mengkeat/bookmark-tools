@@ -62,6 +62,7 @@ def search_bookmarks(
     bookmarks_dir: Path | None = None,
     database_path: Path | None = None,
     folder: str | None = None,
+    tag: str | None = None,
     limit: int = DEFAULT_SEARCH_LIMIT,
     rebuild: bool = False,
 ) -> list[SearchResult]:
@@ -83,6 +84,7 @@ def search_bookmarks(
         query,
         database_path=database_path,
         folder=folder,
+        tag=tag,
         limit=limit,
     )
 
@@ -231,6 +233,10 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         help="Restrict results to a folder and its subfolders",
     )
     parser.add_argument(
+        "--tag",
+        help="Restrict results to bookmarks with the given tag",
+    )
+    parser.add_argument(
         "--limit",
         type=_positive_int,
         default=DEFAULT_SEARCH_LIMIT,
@@ -361,6 +367,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             results = search_bookmarks(
                 args.query,
                 folder=args.folder,
+                tag=args.tag,
                 limit=args.limit,
                 rebuild=args.rebuild,
             )

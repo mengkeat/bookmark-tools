@@ -286,6 +286,92 @@ class BookmarkSearchTest(unittest.TestCase):
                 )
 
 
+class TagFilterTest(unittest.TestCase):
+    """Tests for --tag filtering."""
+
+    def _write_note(
+        self,
+        bookmarks_dir: Path,
+        relative_path: str,
+        *,
+        url: str,
+        title: str,
+        tags: list[str],
+        related: list[str],
+        parent_topic: str,
+        description: str,
+        body: str,
+    ) -> Path:
+        note_path = bookmarks_dir / relative_path
+        note_path.parent.mkdir(parents=True, exist_ok=True)
+        note_path.write_text(
+            "\n".join(
+                [
+                    "---",
+                    f"url: {url}",
+                    f"title: {title}",
+                    f"tags: [{', '.join(tags)}]",
+                    f"related: [{', '.join(related)}]",
+                    f"parent_topic: {parent_topic}",
+                    f"description: {description}",
+                    "---",
+                    "",
+                    body,
+                    "",
+                ]
+            ),
+            encoding="utf-8",
+        )
+        return note_path
+
+    def test_tag_filter_restricts_results(self) -> None:
+        """--tag restricts results to notes matching the tag."""
+        with TemporaryDirectory() as tmp:
+            bookmarks_dir = Path(tmp) / "Bookmarks"
+            database_path = Path(tmp) / "bookmark-search.sqlite3"
+
+            self._write_note(
+                bookmarks_dir,
+                "Dev/python-guide.md",
+                url="https://example.com/python",
+                title="Python Guide",
+                tags=["python", "programming"],
+                related=["coding"],
+                parent_topic="Python",
+                description="A guide to Python",
+                body="Guide content about programming.",
+            )
+            self._write_note(
+                bookmarks_dir,
+                "Dev/rust-guide.md",
+                url="https://example.com/rust",
+                title="Rust Guide",
+                tags=["rust", "programming"],
+                related=["coding"],
+                parent_topic="Rust",
+                description="A guide to Rust",
+                body="Guide content about programming.",
+            )
+
+            # Without tag filter: both match "programming"
+            results = search_bookmarks(
+                "programming",
+                bookmarks_dir=bookmarks_dir,
+                database_path=database_path,
+            )
+            self.assertEqual(len(results), 2)
+
+            # With tag filter: only python note matches
+            results = search_bookmarks(
+                "programming",
+                bookmarks_dir=bookmarks_dir,
+                database_path=database_path,
+                tag="python",
+            )
+            self.assertEqual(len(results), 1)
+            self.assertEqual(results[0].title, "Python Guide")
+
+
 class SearchExportTest(unittest.TestCase):
     """Tests for JSON and CSV export of search results."""
 
