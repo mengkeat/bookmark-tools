@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import argparse
+import csv
+import io
+import json
 import logging
 from pathlib import Path
 from typing import TYPE_CHECKING, Sequence
@@ -255,6 +258,13 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         help=f"Minimum similarity score for semantic/hybrid results (default: {DEFAULT_SIMILARITY_THRESHOLD})",
     )
     parser.add_argument(
+        "--format",
+        choices=["text", "json", "csv"],
+        default="text",
+        dest="output_format",
+        help="Output format (default: text)",
+    )
+    parser.add_argument(
         "--verbose",
         "-v",
         action="store_true",
@@ -294,6 +304,36 @@ def _print_result(position: int, result: SearchResult) -> None:
     print()
 
 
+def _format_results_json(results: list[SearchResult]) -> str:
+    """Serialize search results as a JSON array."""
+    return json.dumps(
+        [
+            {
+                "title": r.title,
+                "url": r.url,
+                "folder": r.folder,
+                "path": str(r.path),
+                "description": r.description,
+                "score": round(r.score, 4),
+            }
+            for r in results
+        ],
+        indent=2,
+    )
+
+
+def _format_results_csv(results: list[SearchResult]) -> str:
+    """Serialize search results as CSV with a header row."""
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(["title", "url", "folder", "path", "description", "score"])
+    for r in results:
+        writer.writerow(
+            [r.title, r.url, r.folder, str(r.path), r.description, f"{r.score:.4f}"]
+        )
+    return output.getvalue()
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     """Run bookmark search and print ranked results."""
     load_env()
@@ -330,8 +370,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     if not results:
         print("No bookmarks found.")
         return 0
-    for position, result in enumerate(results, start=1):
-        _print_result(position, result)
+    if args.output_format == "json":
+        print(_format_results_json(results))
+    elif args.output_format == "csv":
+        print(_format_results_csv(results), end="")
+    else:
+        for position, result in enumerate(results, start=1):
+            _print_result(position, result)
     return 0
 
 

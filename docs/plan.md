@@ -118,10 +118,11 @@ Make half-built features actually useful. Depends on 2A being done.
 
 ### Search Enhancements
 
-#### 2C.6 Export search results (JSON, CSV)
+#### 2C.6 Export search results (JSON, CSV) ✅
 - **What**: Add `--format json` and `--format csv` to `bookmark-search` for scripting.
 - **Files**: `search.py`
 - **Effort**: Low | **Impact**: Medium
+- **Resolved**: added `--format` flag with text/json/csv output formatters
 
 #### 2C.7 Tag-based search filter
 - **What**: Add `--tag` flag to restrict results, complementing existing `--folder`.

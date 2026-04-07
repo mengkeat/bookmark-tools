@@ -1,11 +1,19 @@
 from __future__ import annotations
 
+import csv
+import io
+import json
 from pathlib import Path
 from tempfile import TemporaryDirectory
 import unittest
 
-from bookmark_tools.search import search_bookmarks
+from bookmark_tools.search import (
+    _format_results_csv,
+    _format_results_json,
+    search_bookmarks,
+)
 from bookmark_tools.search_documents import collect_search_documents
+from bookmark_tools.search_index import SearchResult
 
 
 class BookmarkSearchTest(unittest.TestCase):
@@ -276,6 +284,64 @@ class BookmarkSearchTest(unittest.TestCase):
                 self.assertGreaterEqual(
                     len(results), 1, f"Expected match for query '{query}'"
                 )
+
+
+class SearchExportTest(unittest.TestCase):
+    """Tests for JSON and CSV export of search results."""
+
+    def _sample_results(self) -> list[SearchResult]:
+        return [
+            SearchResult(
+                path=Path("/vault/Bookmarks/Dev/python.md"),
+                url="https://example.com/python",
+                title="Python Guide",
+                folder="Dev",
+                description="A guide to Python",
+                score=5.1234,
+            ),
+            SearchResult(
+                path=Path("/vault/Bookmarks/ML/ml-intro.md"),
+                url="https://example.com/ml",
+                title="ML Intro",
+                folder="ML",
+                description="Intro to ML",
+                score=3.5678,
+            ),
+        ]
+
+    def test_format_json_output(self) -> None:
+        """JSON output contains all fields and is valid JSON."""
+        results = self._sample_results()
+        output = _format_results_json(results)
+        parsed = json.loads(output)
+        self.assertEqual(len(parsed), 2)
+        self.assertEqual(parsed[0]["title"], "Python Guide")
+        self.assertEqual(parsed[0]["url"], "https://example.com/python")
+        self.assertEqual(parsed[0]["score"], 5.1234)
+        self.assertEqual(parsed[1]["title"], "ML Intro")
+
+    def test_format_csv_output(self) -> None:
+        """CSV output has a header row and correct data rows."""
+        results = self._sample_results()
+        output = _format_results_csv(results)
+        reader = csv.reader(io.StringIO(output))
+        rows = list(reader)
+        self.assertEqual(rows[0], ["title", "url", "folder", "path", "description", "score"])
+        self.assertEqual(len(rows), 3)  # header + 2 data rows
+        self.assertEqual(rows[1][0], "Python Guide")
+        self.assertEqual(rows[2][0], "ML Intro")
+
+    def test_format_json_empty(self) -> None:
+        """JSON output for empty results is an empty array."""
+        output = _format_results_json([])
+        self.assertEqual(json.loads(output), [])
+
+    def test_format_csv_empty(self) -> None:
+        """CSV output for empty results has only a header row."""
+        output = _format_results_csv([])
+        reader = csv.reader(io.StringIO(output))
+        rows = list(reader)
+        self.assertEqual(len(rows), 1)
 
 
 if __name__ == "__main__":
