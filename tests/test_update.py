@@ -6,7 +6,7 @@ from tempfile import TemporaryDirectory
 from unittest.mock import patch
 import unittest
 
-from bookmark_tools.update import find_note_by_url, update_bookmark
+from bookmark_tools.update import bulk_update, find_note_by_url, update_bookmark
 
 
 SAMPLE_HTML = """\
@@ -210,6 +210,119 @@ class SingleVaultScanTest(unittest.TestCase):
                 )
 
         mock_collect.assert_called_once()
+
+
+def _setup_multi_vault(tmp: str) -> tuple[Path, Path]:
+    """Create a vault with bookmarks in two folders."""
+    vault_dir = Path(tmp) / "Vault"
+    bookmarks_dir = vault_dir / "Bookmarks"
+    ml_dir = bookmarks_dir / "ML-AI"
+    dev_dir = bookmarks_dir / "Development"
+    ml_dir.mkdir(parents=True)
+    dev_dir.mkdir(parents=True)
+
+    (ml_dir / "ml-article.md").write_text(
+        "---\n"
+        "title: ML Article\n"
+        "url: https://example.com/ml\n"
+        "type: article\n"
+        "tags: [ml]\n"
+        "created: 2025-01-15\n"
+        "language: en\n"
+        "parent_topic: Machine Learning\n"
+        "description: ML desc\n"
+        "visibility: private\n"
+        "---\n\nSummary:\nML summary.\n",
+        encoding="utf-8",
+    )
+    (dev_dir / "dev-article.md").write_text(
+        "---\n"
+        "title: Dev Article\n"
+        "url: https://example.com/dev\n"
+        "type: article\n"
+        "tags: [dev]\n"
+        "created: 2025-02-01\n"
+        "language: en\n"
+        "parent_topic: Development\n"
+        "description: Dev desc\n"
+        "visibility: private\n"
+        "---\n\nSummary:\nDev summary.\n",
+        encoding="utf-8",
+    )
+    return vault_dir, bookmarks_dir
+
+
+class BulkUpdateTest(unittest.TestCase):
+    def test_bulk_update_all(self) -> None:
+        """--all updates every bookmark with a URL."""
+        with TemporaryDirectory() as tmp:
+            vault_dir, bookmarks_dir = _setup_multi_vault(tmp)
+            env = {
+                "VAULT_PATH": str(vault_dir),
+                "BOOKMARKS_DIR": str(bookmarks_dir),
+            }
+            with (
+                patch.dict(os.environ, env, clear=True),
+                patch(
+                    "bookmark_tools.fetch.urllib.request.urlopen",
+                    side_effect=lambda req, **kw: _fake_urlopen(req, **kw),
+                ),
+                patch("bookmark_tools.summarize.shutil.which", return_value=None),
+            ):
+                successes, failures = bulk_update(
+                    bookmarks_dir=bookmarks_dir, dry_run=True
+                )
+
+        self.assertEqual(successes, 2)
+        self.assertEqual(failures, 0)
+
+    def test_bulk_update_by_folder(self) -> None:
+        """--folder restricts updates to matching folder subtree."""
+        with TemporaryDirectory() as tmp:
+            vault_dir, bookmarks_dir = _setup_multi_vault(tmp)
+            env = {
+                "VAULT_PATH": str(vault_dir),
+                "BOOKMARKS_DIR": str(bookmarks_dir),
+            }
+            with (
+                patch.dict(os.environ, env, clear=True),
+                patch(
+                    "bookmark_tools.fetch.urllib.request.urlopen",
+                    side_effect=lambda req, **kw: _fake_urlopen(req, **kw),
+                ),
+                patch("bookmark_tools.summarize.shutil.which", return_value=None),
+            ):
+                successes, failures = bulk_update(
+                    bookmarks_dir=bookmarks_dir,
+                    folder="ML-AI",
+                    dry_run=True,
+                )
+
+        self.assertEqual(successes, 1)
+        self.assertEqual(failures, 0)
+
+    def test_bulk_update_handles_fetch_errors(self) -> None:
+        """Bulk update counts fetch errors as failures."""
+        with TemporaryDirectory() as tmp:
+            vault_dir, bookmarks_dir = _setup_multi_vault(tmp)
+            env = {
+                "VAULT_PATH": str(vault_dir),
+                "BOOKMARKS_DIR": str(bookmarks_dir),
+            }
+            with (
+                patch.dict(os.environ, env, clear=True),
+                patch(
+                    "bookmark_tools.fetch.urllib.request.urlopen",
+                    side_effect=ConnectionError("network down"),
+                ),
+                patch("bookmark_tools.summarize.shutil.which", return_value=None),
+            ):
+                successes, failures = bulk_update(
+                    bookmarks_dir=bookmarks_dir, dry_run=True
+                )
+
+        self.assertEqual(successes, 0)
+        self.assertEqual(failures, 2)
 
 
 if __name__ == "__main__":

@@ -89,11 +89,12 @@ Make half-built features actually useful. Depends on 2A being done.
 - **Effort**: Low | **Impact**: High
 - **Resolved**: implemented `bookmark-delete` CLI with search index + embedding cleanup and empty dir removal
 
-#### 2C.2 Bulk update command
+#### 2C.2 Bulk update command ✅
 - **What**: Extend `bookmark-update` with `--all` or `--folder <FOLDER>` to re-process bookmarks after changing the classification guide or LLM model.
 - **Depends on**: 2A.5 (no double scan)
 - **Files**: `update.py`
 - **Effort**: Medium | **Impact**: Medium
+- **Resolved**: added `--all` and `--folder` flags with `bulk_update()` function
 
 #### 2C.3 Idempotent `bookmark --force`
 - **What**: When a bookmark already exists, `--force` overwrites instead of erroring. Removes need to know about `bookmark-update` separately.

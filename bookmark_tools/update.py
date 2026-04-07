@@ -107,12 +107,87 @@ def update_bookmark(
     return note_path, note_text
 
 
+def bulk_update(
+    *,
+    bookmarks_dir: Path | None = None,
+    folder: str | None = None,
+    dry_run: bool = False,
+) -> tuple[int, int]:
+    """Re-fetch and re-classify all bookmarks, or those in *folder*.
+
+    Returns ``(success_count, failure_count)``.
+    """
+    if bookmarks_dir is None:
+        bookmarks_dir = get_bookmarks_dir()
+
+    profile = collect_existing_notes(bookmarks_dir=bookmarks_dir)
+
+    notes = profile.notes
+    if folder:
+        normalized_folder = folder.strip().strip("/")
+        notes = [
+            n
+            for n in notes
+            if n.folder == normalized_folder
+            or n.folder.startswith(f"{normalized_folder}/")
+        ]
+
+    successes = 0
+    failures = 0
+    for note in notes:
+        if not note.url:
+            logger.debug("Skipping %s (no URL)", note.path)
+            continue
+        logger.info("Updating %s …", note.url)
+        try:
+            result = update_bookmark(
+                note.url, bookmarks_dir=bookmarks_dir, dry_run=dry_run
+            )
+            if result is None:
+                logger.warning("Not found in vault: %s", note.url)
+                failures += 1
+            else:
+                note_path, note_text = result
+                if dry_run:
+                    print(f"Target: {note_path}")
+                    print()
+                    print(note_text)
+                    print("─" * 60)
+                else:
+                    print(f"Updated {note_path}")
+                successes += 1
+        except Exception as exc:
+            logger.warning(
+                "Failed to update %s (%s: %s)",
+                note.url,
+                exc.__class__.__name__,
+                exc,
+            )
+            failures += 1
+
+    return successes, failures
+
+
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     """Parse CLI arguments for bookmark update."""
     parser = argparse.ArgumentParser(
         description="Re-fetch and re-classify an existing bookmark."
     )
-    parser.add_argument("url", help="URL of the bookmark to update")
+    parser.add_argument(
+        "url", nargs="?", default=None, help="URL of the bookmark to update"
+    )
+    parser.add_argument(
+        "--all",
+        action="store_true",
+        dest="update_all",
+        help="Re-process all bookmarks in the vault",
+    )
+    parser.add_argument(
+        "--folder",
+        type=str,
+        default=None,
+        help="Re-process all bookmarks in the given folder (and subfolders)",
+    )
     parser.add_argument(
         "--dry-run",
         action="store_true",
@@ -138,6 +213,21 @@ def main(argv: Sequence[str] | None = None) -> int:
     load_env()
     args = parse_args(argv)
     configure_logging(verbose=args.verbose, quiet=args.quiet)
+
+    if args.update_all or args.folder:
+        if args.url:
+            logger.error("Cannot specify a URL together with --all or --folder.")
+            return 1
+        successes, failures = bulk_update(
+            folder=args.folder, dry_run=args.dry_run
+        )
+        total = successes + failures
+        print(f"\nUpdated {successes}/{total} bookmarks successfully.")
+        return 1 if successes == 0 and total > 0 else 0
+
+    if not args.url:
+        logger.error("Either a URL argument, --all, or --folder is required.")
+        return 1
 
     result = update_bookmark(args.url, dry_run=args.dry_run)
     if result is None:
