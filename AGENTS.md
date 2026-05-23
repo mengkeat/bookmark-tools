@@ -44,6 +44,10 @@ Common edit recipes:
 - **Tune CLI flow / dry-run output:** start in `bookmark_tools/cli.py`.
 - **Verify quickly without writing files:** `uv run bookmark <URL> --dry-run`.
 
+Files not to Commit:
+
+- PLAN.md or other planning related files
+
 ---
 
 ### 1. System Purpose
