@@ -204,6 +204,9 @@ Start with rows marked **Mutable**. Most implementation changes should be confin
 | `tests/test_http_retry.py` | Unit tests for HTTP retry: exponential backoff, jitter, retryable codes, non-retryable errors | `HttpRetryTest` | Test file |
 | `tests/test_fetch.py` | Unit tests for fetch module: metadata parsing, HTML cleaning, page data extraction | `FetchTest` | Test file |
 | `tests/test_check.py` | Unit tests for bookmark-check: URL checking, problem detection, edge cases | `BookmarkCheckTest` | Test file |
+| `tests/test_note_filter.py` | Unit tests for note filter: archive sidecar detection, bookmark path iteration | `IsArchiveSidecarTest`, `IterBookmarkNotePathsTest` | Test file |
+| `tests/test_paths.py` | Unit tests for paths: fail-fast vault validation, directory resolution | `RequireBookmarksDirTest`, `GetBookmarksDirTest` | Test file |
+| `tests/test_url_normalize.py` | Unit tests for URL normalization: scheme/host, default ports, path, identity | `NormalizeUrlTest` | Test file |
 | `tests/test_link.py` | Unit tests for link module: URL validation, link operations | Test file |
 | `tests/test_render.py` | Unit tests for render module: note rendering, frontmatter generation | Test file |
 | `tests/test_reorg.py` | Unit tests for reorg module: bookmark reorganization, folder moves | Test file |
