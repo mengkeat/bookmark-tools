@@ -216,12 +216,19 @@ class BookmarkExistsError(Exception):
 
 
 def build_note(
-    url: str, allow_new_subfolder: bool, *, force: bool = False
+    url: str,
+    allow_new_subfolder: bool,
+    *,
+    force: bool = False,
+    profile: BookmarkProfile | None = None,
+    bookmarks_dir: Path | None = None,
 ) -> tuple[Path, str, str]:
     """Build the target note path, rendered note text, and folder decision message."""
-    bookmarks_dir = require_bookmarks_dir()
-    logger.info("Scanning vault for existing bookmarks…")
-    profile = collect_existing_notes(bookmarks_dir=bookmarks_dir)
+    if bookmarks_dir is None:
+        bookmarks_dir = require_bookmarks_dir()
+    if profile is None:
+        logger.info("Scanning vault for existing bookmarks…")
+        profile = collect_existing_notes(bookmarks_dir=bookmarks_dir)
     existing = find_existing_url(url, profile)
     if existing and not force:
         raise BookmarkExistsError(f"Bookmark already exists: {existing}")
@@ -424,11 +431,11 @@ def _filter_existing_batch_urls(
     *,
     force: bool,
     failures_list: list[BatchFailure],
+    profile: BookmarkProfile,
 ) -> list[str]:
     """Skip URLs already present in the vault before starting batch workers."""
     if force:
         return urls
-    profile = collect_existing_notes(bookmarks_dir=require_bookmarks_dir())
     pending: list[str] = []
     for url in urls:
         existing = profile.url_index.get(normalize_url(url))
@@ -450,11 +457,17 @@ def _process_single_url(
     interactive: bool = False,
     archive: bool = False,
     failures_list: list[BatchFailure] | None = None,
+    profile: BookmarkProfile | None = None,
+    bookmarks_dir: Path | None = None,
 ) -> int:
     """Process one URL through the bookmark pipeline. Returns 0 on success, 1 on error."""
     try:
         target_path, note_text, folder_message = build_note(
-            url, allow_new_subfolder, force=force
+            url,
+            allow_new_subfolder,
+            force=force,
+            profile=profile,
+            bookmarks_dir=bookmarks_dir,
         )
     except BookmarkExistsError as exc:
         logger.warning("%s — skipping %s", exc, url)
@@ -508,7 +521,7 @@ def main() -> int:
         return 1
 
     try:
-        require_bookmarks_dir()
+        bookmarks_dir = require_bookmarks_dir()
     except BookmarkPathError as exc:
         logger.error("%s", exc)
         return 1
@@ -520,10 +533,12 @@ def main() -> int:
             return 1
         allow_new = not args.disallow_new_subfolder
         batch_failures: list[BatchFailure] = []
+        batch_profile = collect_existing_notes(bookmarks_dir=bookmarks_dir)
         urls = _filter_existing_batch_urls(
             urls,
             force=args.force,
             failures_list=batch_failures,
+            profile=batch_profile,
         )
         preflight_failure_count = len(batch_failures)
         workers = args.workers
@@ -542,6 +557,8 @@ def main() -> int:
                         force=args.force,
                         archive=args.archive,
                         failures_list=batch_failures,
+                        profile=batch_profile,
+                        bookmarks_dir=bookmarks_dir,
                     )
                     for url in urls
                 ]
@@ -557,6 +574,8 @@ def main() -> int:
                     interactive=args.interactive,
                     archive=args.archive,
                     failures_list=batch_failures,
+                    profile=batch_profile,
+                    bookmarks_dir=bookmarks_dir,
                 )
                 for url in urls
             )
