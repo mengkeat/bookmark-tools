@@ -248,6 +248,6 @@ uv run ruff format bookmark_tools tests  # Format
 ## Project structure
 
 - `AGENTS.md` — Detailed code structure and module documentation for coding agents
-- `docs/plan.md` — Feature and improvement roadmap
+- `docs/SYSTEM_OF_RECORD.md` — Defines canonical vs derived data categories
 - `bookmark_tools/` — Main package source code
-- `tests/` — Unit tests
+- `tests/` — Unit and integration tests
