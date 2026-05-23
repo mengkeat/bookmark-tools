@@ -1,12 +1,19 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
 
-from flask import Blueprint, Response, jsonify, render_template, request, stream_with_context
+from flask import (
+    Blueprint,
+    Response,
+    jsonify,
+    render_template,
+    request,
+    stream_with_context,
+)
 
 from bookmark_tools.check import check_url
 from bookmark_tools.cli import BookmarkExistsError, build_note
+from bookmark_tools.note_filter import iter_bookmark_note_paths
 from bookmark_tools.paths import get_bookmarks_dir
 from bookmark_tools.reorg import propose_reclassifications
 from bookmark_tools.update import update_bookmark
@@ -34,10 +41,12 @@ def api_create_bookmark():
         bookmarks_dir = get_bookmarks_dir()
         target_path.parent.mkdir(parents=True, exist_ok=True)
         target_path.write_text(note_text, encoding="utf-8")
-        return jsonify({
-            "path": str(target_path.relative_to(bookmarks_dir)),
-            "folder_message": folder_message,
-        }), 201
+        return jsonify(
+            {
+                "path": str(target_path.relative_to(bookmarks_dir)),
+                "folder_message": folder_message,
+            }
+        ), 201
     except BookmarkExistsError as exc:
         return jsonify({"error": str(exc)}), 409
     except Exception as exc:
@@ -71,7 +80,7 @@ def api_check():
     timeout = int((request.get_json(silent=True) or {}).get("timeout", 15))
 
     def generate():
-        note_paths = sorted(bookmarks_dir.rglob("*.md"))
+        note_paths = list(iter_bookmark_note_paths(bookmarks_dir))
         total = len(note_paths)
         checked = 0
 
@@ -83,14 +92,27 @@ def api_check():
             checked += 1
 
             if not url or not (url.startswith("http://") or url.startswith("https://")):
-                event = {"type": "skip", "path": rel, "title": title,
-                         "checked": checked, "total": total}
+                event = {
+                    "type": "skip",
+                    "path": rel,
+                    "title": title,
+                    "checked": checked,
+                    "total": total,
+                }
             else:
                 status, reason = check_url(url, timeout=timeout)
                 broken = status == 0 or status >= 400
-                event = {"type": "result", "path": rel, "title": title, "url": url,
-                         "status": status, "reason": reason, "broken": broken,
-                         "checked": checked, "total": total}
+                event = {
+                    "type": "result",
+                    "path": rel,
+                    "title": title,
+                    "url": url,
+                    "status": status,
+                    "reason": reason,
+                    "broken": broken,
+                    "checked": checked,
+                    "total": total,
+                }
 
             yield f"data: {json.dumps(event)}\n\n"
 

@@ -78,6 +78,27 @@ class BookmarkSearchTest(unittest.TestCase):
         )
         return note_a, note_b
 
+    def test_collect_search_documents_ignores_archive_sidecars(self) -> None:
+        """Cleaned-content sidecars are not indexed as bookmark records."""
+        with TemporaryDirectory() as tmp:
+            bookmarks_dir = Path(tmp) / "Bookmarks"
+            note_path = self._write_note(
+                bookmarks_dir,
+                "Development/Python/python-sqlite.md",
+                url="https://example.com/python-sqlite",
+                title="Python SQLite Guide",
+                tags=["python", "sqlite"],
+                related=["database"],
+                parent_topic="Python",
+                description="Guide to sqlite search from python",
+                body="Summary: Build an FTS5 search index with sqlite.",
+            )
+            archive_path = note_path.with_suffix(".content.md")
+            archive_path.write_text("Archived page content", encoding="utf-8")
+            documents = collect_search_documents(bookmarks_dir=bookmarks_dir)
+
+        self.assertEqual([document.path for document in documents], [note_path])
+
     def test_collect_search_documents_reads_frontmatter_and_body(self) -> None:
         """It turns bookmark markdown files into normalized search documents."""
         with TemporaryDirectory() as tmp:
@@ -412,7 +433,9 @@ class SearchExportTest(unittest.TestCase):
         output = _format_results_csv(results)
         reader = csv.reader(io.StringIO(output))
         rows = list(reader)
-        self.assertEqual(rows[0], ["title", "url", "folder", "path", "description", "score"])
+        self.assertEqual(
+            rows[0], ["title", "url", "folder", "path", "description", "score"]
+        )
         self.assertEqual(len(rows), 3)  # header + 2 data rows
         self.assertEqual(rows[1][0], "Python Guide")
         self.assertEqual(rows[2][0], "ML Intro")

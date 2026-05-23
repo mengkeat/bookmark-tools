@@ -6,7 +6,7 @@ from collections import Counter
 from pathlib import Path
 from typing import Sequence
 
-from .paths import get_bookmarks_dir, load_env
+from .paths import BookmarkPathError, load_env, require_bookmarks_dir
 from .vault_profile import collect_existing_notes
 
 logger = logging.getLogger(__name__)
@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 def collect_stats(bookmarks_dir: Path | None = None) -> dict[str, object]:
     """Collect vault statistics from existing bookmark notes."""
     if bookmarks_dir is None:
-        bookmarks_dir = get_bookmarks_dir()
+        bookmarks_dir = require_bookmarks_dir()
 
     profile = collect_existing_notes(bookmarks_dir=bookmarks_dir)
     folder_counts: Counter[str] = Counter()
@@ -105,7 +105,11 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     configure_logging(verbose=args.verbose, quiet=args.quiet)
 
-    stats = collect_stats()
+    try:
+        stats = collect_stats()
+    except BookmarkPathError as exc:
+        logger.error("%s", exc)
+        return 1
     print(format_stats(stats))
     return 0
 

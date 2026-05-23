@@ -12,10 +12,12 @@ from .http_retry import urlopen_with_retry
 from dataclasses import dataclass
 from pathlib import Path
 
-from .paths import DEFAULT_TIMEOUT, get_bookmarks_dir, get_guide_path
+from .note_filter import iter_bookmark_note_paths
+from .paths import DEFAULT_TIMEOUT, get_guide_path, require_bookmarks_dir
 from .tag_normalize import normalize_tags
 from .render import infer_summary
 from .types import BookmarkMetadata, PageData
+from .url_normalize import normalize_url
 from .vault_profile import BookmarkProfile, parse_frontmatter, tokenize
 
 logger = logging.getLogger(__name__)
@@ -43,12 +45,12 @@ class SimilarNote:
 
 def find_existing_url(url: str, profile: BookmarkProfile | None = None) -> Path | None:
     """Return the existing note path for a URL if it is already bookmarked."""
-    normalized = url.rstrip("/")
+    normalized = normalize_url(url)
     if profile:
         return profile.url_index.get(normalized)
-    bookmarks_dir = get_bookmarks_dir()
-    for note_path in bookmarks_dir.rglob("*.md"):
-        existing_url = str(parse_frontmatter(note_path).get("url", "")).rstrip("/")
+    bookmarks_dir = require_bookmarks_dir()
+    for note_path in iter_bookmark_note_paths(bookmarks_dir):
+        existing_url = normalize_url(str(parse_frontmatter(note_path).get("url", "")))
         if existing_url == normalized:
             return note_path
     return None
@@ -321,7 +323,7 @@ def related_note_count(
     if not topic_tokens or not parent_dir.exists():
         return 0
     count = 0
-    for note_path in parent_dir.rglob("*.md"):
+    for note_path in iter_bookmark_note_paths(parent_dir):
         metadata = parse_frontmatter(note_path)
         title_tokens = tokenize(
             " ".join(
@@ -344,7 +346,7 @@ def validate_folder(
 ) -> tuple[str, str]:
     """Validate or adjust folder choices according to vault constraints and support."""
     if bookmarks_dir is None:
-        bookmarks_dir = get_bookmarks_dir()
+        bookmarks_dir = require_bookmarks_dir()
     normalized = re.sub(r"/{2,}", "/", raw_folder.strip().strip("/").replace("\\", "/"))
     if not normalized or normalized.startswith(".") or ".." in normalized.split("/"):
         return (

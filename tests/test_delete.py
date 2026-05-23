@@ -90,8 +90,15 @@ def _setup_search_db(database_path: Path, note_path: Path) -> None:
         INSERT INTO embedding_store (path, url, title, folder, description, embedding, mtime)
         VALUES (?, ?, ?, ?, ?, ?, ?)
         """,
-        (str(note_path), "https://example.com/sample", "Sample Article",
-         "Development/Python", "A sample article", b"\x00" * 16, 0.0),
+        (
+            str(note_path),
+            "https://example.com/sample",
+            "Sample Article",
+            "Development/Python",
+            "A sample article",
+            b"\x00" * 16,
+            0.0,
+        ),
     )
     conn.commit()
     conn.close()
@@ -165,15 +172,15 @@ class DeleteBookmarkTest(unittest.TestCase):
             )
 
             conn = sqlite3.connect(db_path)
-            fts_count = conn.execute(
-                f"SELECT COUNT(*) FROM {SEARCH_TABLE}"
-            ).fetchone()[0]
+            fts_count = conn.execute(f"SELECT COUNT(*) FROM {SEARCH_TABLE}").fetchone()[
+                0
+            ]
             mtime_count = conn.execute(
                 f"SELECT COUNT(*) FROM {MTIME_TABLE}"
             ).fetchone()[0]
-            emb_count = conn.execute(
-                "SELECT COUNT(*) FROM embedding_store"
-            ).fetchone()[0]
+            emb_count = conn.execute("SELECT COUNT(*) FROM embedding_store").fetchone()[
+                0
+            ]
             conn.close()
 
             self.assertEqual(fts_count, 0)

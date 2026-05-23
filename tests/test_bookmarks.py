@@ -13,12 +13,31 @@ from bookmark_tools.classify import (
     strong_similar_notes,
 )
 from bookmark_tools.cli import normalize_metadata
+from bookmark_tools.paths import BookmarkPathError, require_bookmarks_dir
 from bookmark_tools.render import infer_summary, render_note, slugify_filename
 from bookmark_tools.summarize import generate_summary, summarize_with_tool
+from bookmark_tools.url_normalize import normalize_url
 from bookmark_tools.vault_profile import BookmarkProfile, collect_existing_notes
 
 
 class BookmarkHelpersTest(unittest.TestCase):
+    def test_require_bookmarks_dir_fails_without_explicit_config(self) -> None:
+        """It avoids silently treating the current directory as a vault."""
+        with patch.dict(os.environ, {}, clear=True):
+            with self.assertRaises(BookmarkPathError):
+                require_bookmarks_dir()
+
+    def test_normalize_url_uses_conservative_identity_rules(self) -> None:
+        """It normalizes scheme, host, default ports, and trailing slashes."""
+        self.assertEqual(
+            normalize_url(" HTTPS://Example.COM:443/path/ "),
+            "https://example.com/path",
+        )
+        self.assertEqual(
+            normalize_url("http://Example.COM:8080/path/?q=1#section"),
+            "http://example.com:8080/path?q=1#section",
+        )
+
     def test_normalize_metadata_defaults_type_to_article(self) -> None:
         """It falls back to the default type when LLM metadata omits type."""
         profile = BookmarkProfile(
@@ -262,6 +281,24 @@ class BookmarkHelpersTest(unittest.TestCase):
         self.assertEqual(config["model"], "model")
         self.assertEqual(config["base_url"], "https://openrouter.ai/api/v1")
 
+    def test_collect_existing_notes_ignores_archive_sidecars(self) -> None:
+        """It does not treat cleaned-content sidecars as bookmark notes."""
+        with TemporaryDirectory() as tmp:
+            bookmarks = Path(tmp) / "Bookmarks" / "Development"
+            bookmarks.mkdir(parents=True)
+            note_path = bookmarks / "sample.md"
+            note_path.write_text(
+                '---\nurl: "https://example.com/path"\ntitle: "Sample"\n---\n',
+                encoding="utf-8",
+            )
+            sidecar = bookmarks / "sample.content.md"
+            sidecar.write_text("Archived content", encoding="utf-8")
+            profile = collect_existing_notes(bookmarks_dir=Path(tmp) / "Bookmarks")
+        self.assertEqual([note.path for note in profile.notes], [note_path])
+        self.assertNotIn(
+            str(sidecar), [str(path) for path in profile.url_index.values()]
+        )
+
     def test_collect_existing_notes_indexes_urls(self) -> None:
         """It indexes normalized note URLs during vault scan."""
         with TemporaryDirectory() as tmp:
@@ -269,7 +306,7 @@ class BookmarkHelpersTest(unittest.TestCase):
             bookmarks.mkdir(parents=True)
             note_path = bookmarks / "sample.md"
             note_path.write_text(
-                '---\nurl: "https://example.com/path/"\ntitle: "Sample"\n---\n',
+                '---\nurl: "HTTPS://Example.com:443/path/"\ntitle: "Sample"\n---\n',
                 encoding="utf-8",
             )
             profile = collect_existing_notes(bookmarks_dir=Path(tmp) / "Bookmarks")
@@ -331,7 +368,9 @@ class BookmarkHelpersTest(unittest.TestCase):
             default_visibility="private",
             url_index={"https://example.com": expected_path},
         )
-        with patch("bookmark_tools.classify.get_bookmarks_dir") as mocked_bookmarks_dir:
+        with patch(
+            "bookmark_tools.classify.require_bookmarks_dir"
+        ) as mocked_bookmarks_dir:
             found = find_existing_url("https://example.com", profile=profile)
         self.assertEqual(found, expected_path)
         mocked_bookmarks_dir.assert_not_called()

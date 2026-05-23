@@ -4,6 +4,7 @@ from pathlib import Path
 
 from flask import Blueprint, abort, jsonify, render_template, request
 
+from bookmark_tools.note_filter import iter_bookmark_note_paths
 from bookmark_tools.paths import get_bookmarks_dir
 from bookmark_tools.vault_profile import collect_existing_notes, parse_frontmatter
 
@@ -19,11 +20,15 @@ def _bookmark_dict(resolved: Path, bookmarks_dir: Path) -> dict:
         "title": str(metadata.get("title", resolved.stem)),
         "url": str(metadata.get("url", "")),
         "folder": str(rel.parent) if str(rel.parent) != "." else "",
-        "tags": metadata.get("tags", []) if isinstance(metadata.get("tags"), list) else [],
+        "tags": metadata.get("tags", [])
+        if isinstance(metadata.get("tags"), list)
+        else [],
         "description": str(metadata.get("description", "")),
         "type": str(metadata.get("type", "")),
         "created": str(metadata.get("created", "")),
-        "related": metadata.get("related", []) if isinstance(metadata.get("related"), list) else [],
+        "related": metadata.get("related", [])
+        if isinstance(metadata.get("related"), list)
+        else [],
         "parent_topic": str(metadata.get("parent_topic", "")),
     }
 
@@ -64,27 +69,29 @@ def api_bookmarks():
     page_notes = notes[start : start + per_page]
 
     path_lookup: dict[tuple[str, str], str] = {}
-    for p in bookmarks_dir.rglob("*.md"):
+    for p in iter_bookmark_note_paths(bookmarks_dir):
         rel = p.relative_to(bookmarks_dir)
         folder_key = "" if str(rel.parent) == "." else str(rel.parent)
         path_lookup[(folder_key, p.stem)] = str(rel)
 
-    return jsonify({
-        "folder": folder,
-        "page": page,
-        "per_page": per_page,
-        "total": total,
-        "bookmarks": [
-            {
-                "title": n.title,
-                "folder": n.folder,
-                "tags": n.tags,
-                "description": n.description,
-                "path": path_lookup.get((n.folder, n.title), ""),
-            }
-            for n in page_notes
-        ],
-    })
+    return jsonify(
+        {
+            "folder": folder,
+            "page": page,
+            "per_page": per_page,
+            "total": total,
+            "bookmarks": [
+                {
+                    "title": n.title,
+                    "folder": n.folder,
+                    "tags": n.tags,
+                    "description": n.description,
+                    "path": path_lookup.get((n.folder, n.title), ""),
+                }
+                for n in page_notes
+            ],
+        }
+    )
 
 
 @browse_bp.route("/api/bookmarks/<path:note_path>")
@@ -109,23 +116,26 @@ def partials_bookmarks():
     folder_dir = bookmarks_dir / folder if folder else bookmarks_dir
 
     notes = []
-    for md in sorted(folder_dir.glob("*.md")):
+    for md in iter_bookmark_note_paths(folder_dir, recursive=False):
         metadata = parse_frontmatter(md)
         rel = str(md.relative_to(bookmarks_dir))
-        notes.append({
-            "path": rel,
-            "title": str(metadata.get("title", md.stem)),
-            "folder": folder,
-            "tags": metadata.get("tags", []) if isinstance(metadata.get("tags"), list) else [],
-            "description": str(metadata.get("description", "")),
-        })
+        notes.append(
+            {
+                "path": rel,
+                "title": str(metadata.get("title", md.stem)),
+                "folder": folder,
+                "tags": metadata.get("tags", [])
+                if isinstance(metadata.get("tags"), list)
+                else [],
+                "description": str(metadata.get("description", "")),
+            }
+        )
 
     return render_template(
         "partials/bookmark_list.html",
         notes=notes,
         folder=folder,
     )
-
 
 
 @browse_bp.route("/partials/bookmark-detail/<path:note_path>")

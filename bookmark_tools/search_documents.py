@@ -4,7 +4,8 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
-from .paths import get_bookmarks_dir
+from .note_filter import iter_bookmark_note_paths
+from .paths import require_bookmarks_dir
 from .vault_profile import read_frontmatter
 
 WHITESPACE_PATTERN = re.compile(r"\s+")
@@ -49,9 +50,9 @@ def collect_search_documents(
 ) -> list[SearchDocument]:
     """Collect normalized bookmark documents for search indexing."""
     if bookmarks_dir is None:
-        bookmarks_dir = get_bookmarks_dir()
+        bookmarks_dir = require_bookmarks_dir()
     documents: list[SearchDocument] = []
-    for note_path in sorted(bookmarks_dir.rglob("*.md")):
+    for note_path in iter_bookmark_note_paths(bookmarks_dir):
         metadata, _ = read_frontmatter(note_path)
         relative_folder = str(note_path.relative_to(bookmarks_dir).parent)
         documents.append(

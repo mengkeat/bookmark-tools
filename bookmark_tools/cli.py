@@ -23,10 +23,11 @@ from .classify import (
     validate_folder,
 )
 from .fetch import extract_page_data
-from .paths import get_bookmarks_dir, load_env
+from .paths import BookmarkPathError, require_bookmarks_dir, load_env
 from .render import infer_summary, render_note, slugify_filename, uniquify_path
 from .summarize import generate_summary
 from .types import BookmarkMetadata, NormalizedBookmarkMetadata, PageData
+from .url_normalize import normalize_url
 from .vault_profile import BookmarkProfile, collect_existing_notes
 
 logger = logging.getLogger(__name__)
@@ -218,8 +219,9 @@ def build_note(
     url: str, allow_new_subfolder: bool, *, force: bool = False
 ) -> tuple[Path, str, str]:
     """Build the target note path, rendered note text, and folder decision message."""
+    bookmarks_dir = require_bookmarks_dir()
     logger.info("Scanning vault for existing bookmarks…")
-    profile = collect_existing_notes()
+    profile = collect_existing_notes(bookmarks_dir=bookmarks_dir)
     existing = find_existing_url(url, profile)
     if existing and not force:
         raise BookmarkExistsError(f"Bookmark already exists: {existing}")
@@ -258,7 +260,6 @@ def build_note(
         used_llm_classification=llm_metadata is not None,
         summary_override=summary_override,
     )
-    bookmarks_dir = get_bookmarks_dir()
     if existing and force:
         target_path = existing
     else:
@@ -404,6 +405,42 @@ class BatchFailure:
         self.reason = reason
 
 
+def _dedupe_batch_urls(urls: list[str]) -> list[str]:
+    """Return URLs deduplicated by normalized identity while preserving order."""
+    seen: set[str] = set()
+    unique_urls: list[str] = []
+    for url in urls:
+        normalized = normalize_url(url)
+        if normalized in seen:
+            logger.warning("Skipping duplicate URL in batch: %s", url)
+            continue
+        seen.add(normalized)
+        unique_urls.append(url)
+    return unique_urls
+
+
+def _filter_existing_batch_urls(
+    urls: list[str],
+    *,
+    force: bool,
+    failures_list: list[BatchFailure],
+) -> list[str]:
+    """Skip URLs already present in the vault before starting batch workers."""
+    if force:
+        return urls
+    profile = collect_existing_notes(bookmarks_dir=require_bookmarks_dir())
+    pending: list[str] = []
+    for url in urls:
+        existing = profile.url_index.get(normalize_url(url))
+        if existing:
+            reason = f"Bookmark already exists: {existing}"
+            logger.warning("%s — skipping %s", reason, url)
+            failures_list.append(BatchFailure(url, reason))
+            continue
+        pending.append(url)
+    return pending
+
+
 def _process_single_url(
     url: str,
     *,
@@ -466,20 +503,36 @@ def main() -> int:
     configure_logging(verbose=args.verbose, quiet=args.quiet)
 
     batch_file = args.retry_failed or args.file
+    if not batch_file and not args.url:
+        logger.error("Either a URL argument or --file is required.")
+        return 1
+
+    try:
+        require_bookmarks_dir()
+    except BookmarkPathError as exc:
+        logger.error("%s", exc)
+        return 1
+
     if batch_file:
-        urls = _read_urls_from_file(batch_file)
+        urls = _dedupe_batch_urls(_read_urls_from_file(batch_file))
         if not urls:
             logger.error("No URLs found in %s", batch_file)
             return 1
         allow_new = not args.disallow_new_subfolder
         batch_failures: list[BatchFailure] = []
+        urls = _filter_existing_batch_urls(
+            urls,
+            force=args.force,
+            failures_list=batch_failures,
+        )
+        preflight_failure_count = len(batch_failures)
         workers = args.workers
         if workers is None:
             workers = 1 if args.interactive else 4
-        if workers > 1 and not args.interactive:
-            with concurrent.futures.ThreadPoolExecutor(
-                max_workers=workers
-            ) as executor:
+        if not urls:
+            failure_count = 0
+        elif workers > 1 and not args.interactive:
+            with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as executor:
                 futures = [
                     executor.submit(
                         _process_single_url,
@@ -507,17 +560,14 @@ def main() -> int:
                 )
                 for url in urls
             )
-        total = len(urls)
-        print(f"\nProcessed {total - failure_count}/{total} URLs successfully.")
+        total_failures = preflight_failure_count + failure_count
+        total = len(urls) + preflight_failure_count
+        print(f"\nProcessed {total - total_failures}/{total} URLs successfully.")
         if batch_failures:
             print(f"\nFailed URLs ({len(batch_failures)}):")
             for failure in batch_failures:
                 print(f"  {failure.url}  — {failure.reason}")
-        return 1 if failure_count == total else 0
-
-    if not args.url:
-        logger.error("Either a URL argument or --file is required.")
-        return 1
+        return 1 if total > 0 and total_failures == total else 0
 
     return _process_single_url(
         args.url,

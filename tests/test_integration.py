@@ -11,8 +11,11 @@ from bookmark_tools.cli import (
     BookmarkExistsError,
     build_note,
     main,
+    _dedupe_batch_urls,
     _read_urls_from_file,
 )
+from bookmark_tools.search_documents import collect_search_documents
+from bookmark_tools.vault_profile import collect_existing_notes
 
 
 SAMPLE_HTML = """\
@@ -294,6 +297,20 @@ class IntegrationBuildNoteTest(unittest.TestCase):
 class IntegrationCLIMainTest(unittest.TestCase):
     """Integration tests for the CLI main() function."""
 
+    def test_main_fails_when_vault_is_not_configured(self) -> None:
+        """Commands fail fast instead of scanning the current directory."""
+        with (
+            patch.dict(
+                os.environ, {"BOOKMARK_ENV_FILE": "/tmp/missing.env"}, clear=True
+            ),
+            patch("sys.argv", ["bookmark", "https://example.com/missing-vault"]),
+            patch("bookmark_tools.fetch.urllib.request.urlopen") as mocked_urlopen,
+        ):
+            exit_code = main()
+
+        self.assertEqual(exit_code, 1)
+        mocked_urlopen.assert_not_called()
+
     def test_dry_run_prints_note_without_writing(self) -> None:
         """--dry-run prints the note to stdout but does not create a file."""
         with TemporaryDirectory() as tmp:
@@ -484,6 +501,12 @@ class ArchiveContentTest(unittest.TestCase):
             content = archive_files[0].read_text(encoding="utf-8")
             self.assertIn("body content", content)
 
+            profile = collect_existing_notes(bookmarks_dir=bookmarks_dir)
+            search_documents = collect_search_documents(bookmarks_dir=bookmarks_dir)
+            self.assertEqual(len(profile.notes), 2)
+            self.assertEqual(len(search_documents), 2)
+            self.assertNotIn(archive_files[0], [doc.path for doc in search_documents])
+
     def test_archive_not_created_without_flag(self) -> None:
         """No archive file is created when --archive is not set."""
         with TemporaryDirectory() as tmp:
@@ -513,6 +536,20 @@ class ArchiveContentTest(unittest.TestCase):
 
 class BatchImportTest(unittest.TestCase):
     """Tests for batch URL import functionality."""
+
+    def test_dedupe_batch_urls_uses_normalized_identity(self) -> None:
+        """It skips normalized duplicates before batch workers start."""
+        urls = _dedupe_batch_urls(
+            [
+                "HTTPS://Example.com:443/path/",
+                "https://example.com/path",
+                "https://example.com/other",
+            ]
+        )
+        self.assertEqual(
+            urls,
+            ["HTTPS://Example.com:443/path/", "https://example.com/other"],
+        )
 
     def test_read_urls_from_file_skips_comments_and_blanks(self) -> None:
         """It reads URLs, skipping comments and blank lines."""
@@ -600,7 +637,9 @@ class BatchImportTest(unittest.TestCase):
 class BatchErrorReportingTest(unittest.TestCase):
     """Tests for batch error recovery and reporting."""
 
-    def test_batch_reports_failed_urls(self, ) -> None:
+    def test_batch_reports_failed_urls(
+        self,
+    ) -> None:
         """Batch processing prints failed URLs with reasons."""
         with TemporaryDirectory() as tmp:
             vault_dir, bookmarks_dir = _setup_vault(tmp)
@@ -615,7 +654,12 @@ class BatchErrorReportingTest(unittest.TestCase):
                 "BOOKMARKS_DIR": str(bookmarks_dir),
             }
             captured: list[str] = []
-            original_print = __builtins__["print"] if isinstance(__builtins__, dict) else __builtins__.print
+            original_print = (
+                __builtins__["print"]
+                if isinstance(__builtins__, dict)
+                else __builtins__.print
+            )
+
             def capture_print(*args, **kwargs):
                 captured.append(" ".join(str(a) for a in args))
                 original_print(*args, **kwargs)
@@ -690,7 +734,14 @@ class ParallelBatchTest(unittest.TestCase):
                 patch.dict(os.environ, env, clear=True),
                 patch(
                     "sys.argv",
-                    ["bookmark", "--file", str(url_file), "--dry-run", "--workers", "2"],
+                    [
+                        "bookmark",
+                        "--file",
+                        str(url_file),
+                        "--dry-run",
+                        "--workers",
+                        "2",
+                    ],
                 ),
                 patch(
                     "bookmark_tools.fetch.urllib.request.urlopen",
@@ -719,7 +770,14 @@ class ParallelBatchTest(unittest.TestCase):
                 patch.dict(os.environ, env, clear=True),
                 patch(
                     "sys.argv",
-                    ["bookmark", "--file", str(url_file), "--dry-run", "--workers", "1"],
+                    [
+                        "bookmark",
+                        "--file",
+                        str(url_file),
+                        "--dry-run",
+                        "--workers",
+                        "1",
+                    ],
                 ),
                 patch(
                     "bookmark_tools.fetch.urllib.request.urlopen",

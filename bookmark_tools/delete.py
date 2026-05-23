@@ -5,9 +5,15 @@ import logging
 from pathlib import Path
 from typing import Sequence
 
-from .paths import get_bookmarks_dir, get_search_index_path, load_env
+from .paths import (
+    BookmarkPathError,
+    get_search_index_path,
+    load_env,
+    require_bookmarks_dir,
+)
 from .search_index import MTIME_TABLE, SEARCH_TABLE
-from .vault_profile import collect_existing_notes, read_frontmatter
+from .url_normalize import normalize_url
+from .vault_profile import collect_existing_notes
 
 logger = logging.getLogger(__name__)
 
@@ -25,9 +31,7 @@ def _remove_from_search_index(note_path: Path, database_path: Path) -> None:
             connection.execute(
                 f"DELETE FROM {SEARCH_TABLE} WHERE path = ?", (path_str,)
             )
-            connection.execute(
-                f"DELETE FROM {MTIME_TABLE} WHERE path = ?", (path_str,)
-            )
+            connection.execute(f"DELETE FROM {MTIME_TABLE} WHERE path = ?", (path_str,))
     except sqlite3.OperationalError:
         pass
     finally:
@@ -67,11 +71,11 @@ def find_note(
     *bookmarks_dir*).
     """
     if bookmarks_dir is None:
-        bookmarks_dir = get_bookmarks_dir()
+        bookmarks_dir = require_bookmarks_dir()
 
     if "://" in target:
         profile = collect_existing_notes(bookmarks_dir=bookmarks_dir)
-        return profile.url_index.get(target.rstrip("/"))
+        return profile.url_index.get(normalize_url(target))
 
     candidate = Path(target)
     if candidate.is_absolute():
@@ -93,7 +97,7 @@ def delete_bookmark(
     bookmark was not found.
     """
     if bookmarks_dir is None:
-        bookmarks_dir = get_bookmarks_dir()
+        bookmarks_dir = require_bookmarks_dir()
     if database_path is None:
         database_path = get_search_index_path()
 
@@ -155,7 +159,11 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     configure_logging(verbose=args.verbose, quiet=args.quiet)
 
-    note_path = delete_bookmark(args.target, dry_run=args.dry_run)
+    try:
+        note_path = delete_bookmark(args.target, dry_run=args.dry_run)
+    except BookmarkPathError as exc:
+        logger.error("%s", exc)
+        return 1
     if note_path is None:
         logger.error("No bookmark found for: %s", args.target)
         return 1

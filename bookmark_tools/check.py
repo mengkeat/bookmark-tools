@@ -10,7 +10,8 @@ import urllib.request
 from pathlib import Path
 from typing import Sequence
 
-from .paths import get_bookmarks_dir, load_env
+from .note_filter import iter_bookmark_note_paths
+from .paths import BookmarkPathError, load_env, require_bookmarks_dir
 from .vault_profile import parse_frontmatter
 
 logger = logging.getLogger(__name__)
@@ -57,10 +58,10 @@ def check_bookmarks(
 ) -> list[dict[str, object]]:
     """Check all bookmarked URLs and return a list of problem entries."""
     if bookmarks_dir is None:
-        bookmarks_dir = get_bookmarks_dir()
+        bookmarks_dir = require_bookmarks_dir()
 
     problems: list[dict[str, object]] = []
-    for note_path in sorted(bookmarks_dir.rglob("*.md")):
+    for note_path in iter_bookmark_note_paths(bookmarks_dir):
         metadata = parse_frontmatter(note_path)
         url = str(metadata.get("url", "")).strip()
         if not url or not (url.startswith("http://") or url.startswith("https://")):
@@ -217,7 +218,11 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     configure_logging(verbose=args.verbose, quiet=args.quiet)
 
-    problems = check_bookmarks(timeout=args.timeout)
+    try:
+        problems = check_bookmarks(timeout=args.timeout)
+    except BookmarkPathError as exc:
+        logger.error("%s", exc)
+        return 1
 
     if args.format == "json":
         output = [

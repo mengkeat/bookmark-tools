@@ -5,7 +5,9 @@ from collections import Counter, defaultdict
 from dataclasses import dataclass
 from pathlib import Path
 
-from .paths import get_bookmarks_dir
+from .note_filter import iter_bookmark_note_paths
+from .paths import require_bookmarks_dir
+from .url_normalize import normalize_url
 
 STOPWORDS = {
     "a",
@@ -169,7 +171,7 @@ def collect_existing_notes(
 ) -> BookmarkProfile:
     """Collect existing bookmark notes and derive profile data used for classification."""
     if bookmarks_dir is None:
-        bookmarks_dir = get_bookmarks_dir()
+        bookmarks_dir = require_bookmarks_dir()
     notes: list[NoteProfile] = []
     field_orders: list[list[str]] = []
     folder_examples: dict[str, list[str]] = defaultdict(list)
@@ -177,10 +179,10 @@ def collect_existing_notes(
     visibility_values: list[str] = []
     url_index: dict[str, Path] = {}
 
-    for note_path in bookmarks_dir.rglob("*.md"):
+    for note_path in iter_bookmark_note_paths(bookmarks_dir):
         metadata, order = read_frontmatter(note_path)
         field_orders.append(order)
-        existing_url = str(metadata.get("url", "")).strip().rstrip("/")
+        existing_url = normalize_url(str(metadata.get("url", "")))
         if existing_url and existing_url not in url_index:
             url_index[existing_url] = note_path
         folder = str(note_path.relative_to(bookmarks_dir).parent)

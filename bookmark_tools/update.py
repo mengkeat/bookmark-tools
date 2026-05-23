@@ -13,9 +13,11 @@ from .classify import (
 )
 from .cli import configure_logging, normalize_metadata
 from .fetch import extract_page_data
-from .paths import get_bookmarks_dir, load_env
+from .note_filter import iter_bookmark_note_paths
+from .paths import BookmarkPathError, load_env, require_bookmarks_dir
 from .render import render_note
 from .summarize import generate_summary
+from .url_normalize import normalize_url
 from .vault_profile import collect_existing_notes, read_frontmatter
 
 logger = logging.getLogger(__name__)
@@ -29,11 +31,12 @@ def find_note_by_url(url: str, bookmarks_dir: Path | None = None) -> Path | None
     profile is already available, to avoid scanning the vault twice.
     """
     if bookmarks_dir is None:
-        bookmarks_dir = get_bookmarks_dir()
-    normalized = url.rstrip("/")
-    for note_path in bookmarks_dir.rglob("*.md"):
+        bookmarks_dir = require_bookmarks_dir()
+    normalized = normalize_url(url)
+
+    for note_path in iter_bookmark_note_paths(bookmarks_dir):
         metadata, _ = read_frontmatter(note_path)
-        existing_url = str(metadata.get("url", "")).strip().rstrip("/")
+        existing_url = normalize_url(str(metadata.get("url", "")))
         if existing_url == normalized:
             return note_path
     return None
@@ -51,12 +54,12 @@ def update_bookmark(
     is not found in the vault.
     """
     if bookmarks_dir is None:
-        bookmarks_dir = get_bookmarks_dir()
+        bookmarks_dir = require_bookmarks_dir()
 
     # Single vault scan — use the url_index from the profile instead of a
     # separate rglob pass in find_note_by_url.
     profile = collect_existing_notes(bookmarks_dir=bookmarks_dir)
-    note_path = profile.url_index.get(url.rstrip("/"))
+    note_path = profile.url_index.get(normalize_url(url))
     if note_path is None:
         return None
 
@@ -118,7 +121,7 @@ def bulk_update(
     Returns ``(success_count, failure_count)``.
     """
     if bookmarks_dir is None:
-        bookmarks_dir = get_bookmarks_dir()
+        bookmarks_dir = require_bookmarks_dir()
 
     profile = collect_existing_notes(bookmarks_dir=bookmarks_dir)
 
@@ -218,9 +221,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         if args.url:
             logger.error("Cannot specify a URL together with --all or --folder.")
             return 1
-        successes, failures = bulk_update(
-            folder=args.folder, dry_run=args.dry_run
-        )
+        try:
+            successes, failures = bulk_update(folder=args.folder, dry_run=args.dry_run)
+        except BookmarkPathError as exc:
+            logger.error("%s", exc)
+            return 1
         total = successes + failures
         print(f"\nUpdated {successes}/{total} bookmarks successfully.")
         return 1 if successes == 0 and total > 0 else 0
@@ -229,7 +234,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         logger.error("Either a URL argument, --all, or --folder is required.")
         return 1
 
-    result = update_bookmark(args.url, dry_run=args.dry_run)
+    try:
+        result = update_bookmark(args.url, dry_run=args.dry_run)
+    except BookmarkPathError as exc:
+        logger.error("%s", exc)
+        return 1
     if result is None:
         logger.error("No bookmark found for URL: %s", args.url)
         return 1

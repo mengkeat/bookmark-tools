@@ -8,7 +8,12 @@ import logging
 from pathlib import Path
 from typing import TYPE_CHECKING, Sequence
 
-from .paths import get_bookmarks_dir, get_search_index_path, load_env
+from .paths import (
+    BookmarkPathError,
+    get_search_index_path,
+    load_env,
+    require_bookmarks_dir,
+)
 from .search_documents import collect_search_documents
 from .search_index import (
     SearchResult,
@@ -46,7 +51,7 @@ def refresh_search_index(
     to drop and recreate the index from scratch.
     """
     if bookmarks_dir is None:
-        bookmarks_dir = get_bookmarks_dir()
+        bookmarks_dir = require_bookmarks_dir()
     if database_path is None:
         database_path = get_search_index_path()
     documents = collect_search_documents(bookmarks_dir=bookmarks_dir)
@@ -72,7 +77,7 @@ def search_bookmarks(
     force a full index rebuild.
     """
     if bookmarks_dir is None:
-        bookmarks_dir = get_bookmarks_dir()
+        bookmarks_dir = require_bookmarks_dir()
     if database_path is None:
         database_path = get_search_index_path()
     refresh_search_index(
@@ -102,7 +107,7 @@ def search_bookmarks_semantic(
     from .embeddings import refresh_embeddings, semantic_search
 
     if bookmarks_dir is None:
-        bookmarks_dir = get_bookmarks_dir()
+        bookmarks_dir = require_bookmarks_dir()
     if database_path is None:
         database_path = get_search_index_path()
     documents = collect_search_documents(bookmarks_dir=bookmarks_dir)
@@ -187,7 +192,7 @@ def search_bookmarks_hybrid(
     from .embeddings import refresh_embeddings, semantic_search
 
     if bookmarks_dir is None:
-        bookmarks_dir = get_bookmarks_dir()
+        bookmarks_dir = require_bookmarks_dir()
     if database_path is None:
         database_path = get_search_index_path()
     documents = collect_search_documents(bookmarks_dir=bookmarks_dir)
@@ -371,7 +376,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 limit=args.limit,
                 rebuild=args.rebuild,
             )
-    except ValueError as exc:
+    except (BookmarkPathError, ValueError) as exc:
         logger.error("%s", exc)
         return 1
     if not results:

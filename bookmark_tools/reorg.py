@@ -11,7 +11,7 @@ from .classify import (
     heuristic_classification,
     rank_similar_notes,
 )
-from .paths import get_bookmarks_dir, load_env
+from .paths import BookmarkPathError, load_env, require_bookmarks_dir
 from .vault_profile import collect_existing_notes
 
 logger = logging.getLogger(__name__)
@@ -29,7 +29,7 @@ def propose_reclassifications(
     differs from the current one.
     """
     if bookmarks_dir is None:
-        bookmarks_dir = get_bookmarks_dir()
+        bookmarks_dir = require_bookmarks_dir()
 
     profile = collect_existing_notes(bookmarks_dir=bookmarks_dir)
     proposals: list[dict[str, str]] = []
@@ -83,7 +83,7 @@ def apply_reclassifications(
     ``path`` and ``error`` keys for any moves that failed.
     """
     if bookmarks_dir is None:
-        bookmarks_dir = get_bookmarks_dir()
+        bookmarks_dir = require_bookmarks_dir()
 
     moved = 0
     errors: list[dict[str, str]] = []
@@ -168,7 +168,11 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     configure_logging(verbose=args.verbose, quiet=args.quiet)
 
-    proposals = propose_reclassifications(use_llm=args.llm)
+    try:
+        proposals = propose_reclassifications(use_llm=args.llm)
+    except BookmarkPathError as exc:
+        logger.error("%s", exc)
+        return 1
     if not proposals:
         print("No reclassifications proposed. All bookmarks are well-placed.")
         return 0
