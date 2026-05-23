@@ -7,7 +7,7 @@ CLI tools for fetching, classifying, summarizing, and searching bookmarks in an 
 - **Bookmark creation**: Fetch a web page, classify it with LLM (or heuristic fallback), generate a summary, and write a structured markdown note to your vault.
 - **Batch import**: Import multiple URLs from a file or stdin with `--file`/`-f`.
 - **Interactive mode**: Review and confirm classification before writing with `--interactive`/`-i`.
-- **Content archiving**: Save a cleaned copy of page content alongside the bookmark with `--archive`.
+- **Content archiving**: Save a cleaned copy of page content alongside the bookmark with `--archive`; archive sidecars are ignored by bookmark scans and search indexing.
 - **Bookmark update**: Re-fetch and re-classify existing bookmarks with `bookmark-update`, preserving creation date. Supports `--all` and `--folder` for bulk updates.
 - **Bookmark deletion**: Delete bookmarks by URL or file path with `bookmark-delete`, cleaning up search index and embeddings.
 - **Search**: BM25 keyword search, semantic vector search, or hybrid search with context snippets. Filter by `--tag`, export as JSON/CSV.
@@ -15,9 +15,8 @@ CLI tools for fetching, classifying, summarizing, and searching bookmarks in an 
 - **Vault statistics**: View bookmark counts, tag distribution, and folder stats with `bookmark-stats`.
 - **Folder reorganization**: Propose folder reclassifications with `bookmark-reorg`.
 - **Tag normalization**: Consistent lowercase kebab-case tags with abbreviation alias resolution.
-- **Bidirectional linking**: Update related fields of similar existing bookmarks when creating new ones.
-- **Unified config file**: Consolidate settings in a `bookmark-tools.toml` config file.
-- **Zero runtime dependencies** beyond Python stdlib (numpy is optional for faster cosine similarity).
+- **Related-topic metadata**: Populate `related` and `parent_topic` fields from LLM or heuristic signals.
+- **Small dependency set**: Core tooling is mostly stdlib; Flask powers the web UI and NumPy accelerates vector similarity.
 
 ## Installation
 
@@ -29,33 +28,7 @@ uv sync
 
 ## Configuration
 
-Settings can be configured via environment variables (`.env` file) or a unified TOML config file.
-
-### Config file (recommended)
-
-Create a `bookmark-tools.toml` in your vault or working directory:
-
-```toml
-[llm]
-api_key = "your-api-key"
-model = "gpt-4.1-mini"
-base_url = "https://api.openai.com/v1"
-provider = ""  # or "openrouter"
-
-[timeouts]
-fetch = 20
-llm_classify = 20
-llm_summarize = 180
-link_check = 15
-
-[search]
-similarity_threshold = 0.40
-default_limit = 10
-```
-
-The file is auto-discovered in `$VAULT_PATH` or the current directory. Override with `BOOKMARK_CONFIG` env var.
-
-### Environment variables
+Settings are currently configured with environment variables. `load_env()` reads `.env` files from the configured vault, the vault parent, the current directory, or the path specified by `BOOKMARK_ENV_FILE`.
 
 Copy `.env.example` to `.env` and fill in your values:
 
@@ -67,12 +40,11 @@ cp .env.example .env
 
 | Variable | Description |
 |---|---|
-| `VAULT_PATH` | Path to your Obsidian vault root (containing `Bookmarks/` and `Meta/`) |
-| `OPENROUTER_API_KEY` (or `OPENAI_API_KEY`) | API key for LLM classification and embeddings |
-| `LLM_PROVIDER` | `openrouter` or `litellm` (default: `openrouter`) |
-| `MODEL_ID` | Model identifier for classification (default: `gpt-4.1-mini`) |
+| `VAULT_PATH` | Path to your Obsidian vault root. Used to derive `Bookmarks/` and `Meta/` defaults unless overridden. |
 
-#### Optional overrides
+Alternatively, set `BOOKMARKS_DIR` directly for commands that operate on a bookmark directory.
+
+#### Optional overrides and provider settings
 
 | Variable | Description |
 |---|---|
@@ -80,6 +52,10 @@ cp .env.example .env
 | `BOOKMARK_SEARCH_INDEX` | Override the search database path (default: `$VAULT_PATH/Meta/bookmark-search.sqlite3`) |
 | `BOOKMARK_CLASSIFICATION_GUIDE` | Override the classification guide path |
 | `BOOKMARK_ENV_FILE` | Override the .env file path |
+| `BOOKMARK_LLM_API_KEY`, `OPENAI_API_KEY`, or `OPENROUTER_API_KEY` | Optional API key for LLM classification, LLM summaries, and semantic search embeddings. Without one, bookmark creation falls back to heuristics and semantic search is unavailable. |
+| `BOOKMARK_LLM_MODEL`, `OPENAI_MODEL`, or `MODEL_ID` | Model identifier for classification and LLM summary fallback (default: `gpt-4.1-mini`) |
+| `BOOKMARK_LLM_BASE_URL` or `OPENAI_BASE_URL` | OpenAI-compatible API base URL |
+| `LLM_PROVIDER` | Set to `openrouter` to default the base URL to OpenRouter when no explicit base URL is configured |
 
 ## Usage
 
@@ -213,6 +189,8 @@ When you run `uv run bookmark <URL>`, the tool:
 4. Generates a summary via the `summarize` CLI, classifier output, LLM, or heuristic fallback
 5. Writes a structured markdown note with YAML frontmatter to your vault
 
+Bookmark Markdown notes are the canonical system of record; search indexes, embeddings, and archive sidecars are derived/cache data. See `docs/SYSTEM_OF_RECORD.md`.
+
 ### Summary fallback chain
 
 1. External `summarize` CLI (if available)
@@ -235,10 +213,9 @@ A Flask-based web UI is included in the `web/` directory. It exposes the same fu
 
 ### Launch
 
-Install the extra dependency and run the server:
+`uv sync` installs the Flask dependency declared by the project. Run:
 
 ```bash
-uv pip install flask
 uv run python -m web
 ```
 
