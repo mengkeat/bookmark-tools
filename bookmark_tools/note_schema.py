@@ -499,7 +499,16 @@ def build_schema_v1_values(
     final = final_url or url
     canonical = canonical_url or final
     fetched_at = last_fetched_at or utc_now()
-    success_at = last_success_at or (fetched_at if status == "ok" else "")
+    # Determine last_success_at:
+    # - If caller provides an explicit value, use it
+    # - Otherwise, refresh to now on success, or preserve existing on failure
+    existing_success_at = str(existing_metadata.get("last_success_at", "")).strip()
+    if last_success_at:
+        resolved_success_at = last_success_at
+    elif status == "ok":
+        resolved_success_at = fetched_at
+    else:
+        resolved_success_at = existing_success_at
     bookmark_id = str(existing_metadata.get("id", "")).strip() or stable_bookmark_id(
         url
     )
@@ -516,9 +525,7 @@ def build_schema_v1_values(
         "tags": list(tags),
         "added_at": added_at or preserved_added_at or created,
         "last_fetched_at": fetched_at,
-        "last_success_at": last_success_at
-        or str(existing_metadata.get("last_success_at", "")).strip()
-        or success_at,
+        "last_success_at": resolved_success_at,
         "created": created,
         "last_updated": last_updated,
         "language": language,

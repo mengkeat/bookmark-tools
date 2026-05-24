@@ -342,5 +342,70 @@ class UnknownFieldsPreservationTest(unittest.TestCase):
         self.assertIn("New summary", rendered)
 
 
+class TimestampSemanticsTest(unittest.TestCase):
+    """Tests for last_fetched_at and last_success_at timestamp semantics."""
+
+    def test_success_refreshes_last_success_at(self) -> None:
+        """Successful fetch sets last_success_at to the fetch timestamp."""
+        values = build_schema_v1_values(
+            title="Example",
+            url="https://example.com",
+            bookmark_type="article",
+            tags=[],
+            created="2026-01-01",
+            last_updated="2026-05-24",
+            language="en",
+            related=[],
+            parent_topic="Dev",
+            visibility="private",
+            description="Desc",
+            status="ok",
+            last_fetched_at="2026-05-24T12:00:00Z",
+        )
+        self.assertEqual(values["last_fetched_at"], "2026-05-24T12:00:00Z")
+        self.assertEqual(values["last_success_at"], "2026-05-24T12:00:00Z")
+
+    def test_failure_preserves_existing_last_success_at(self) -> None:
+        """Failed fetch preserves the previous last_success_at."""
+        values = build_schema_v1_values(
+            title="Example",
+            url="https://example.com",
+            bookmark_type="article",
+            tags=[],
+            created="2026-01-01",
+            last_updated="2026-05-24",
+            language="en",
+            related=[],
+            parent_topic="Dev",
+            visibility="private",
+            description="Desc",
+            status="error",
+            last_fetched_at="2026-05-24T12:00:00Z",
+            existing_metadata={"last_success_at": "2026-01-01T00:00:00Z"},
+        )
+        self.assertEqual(values["last_fetched_at"], "2026-05-24T12:00:00Z")
+        self.assertEqual(values["last_success_at"], "2026-01-01T00:00:00Z")
+
+    def test_explicit_last_success_at_overrides(self) -> None:
+        """Explicit last_success_at takes precedence over computed value."""
+        values = build_schema_v1_values(
+            title="Example",
+            url="https://example.com",
+            bookmark_type="article",
+            tags=[],
+            created="2026-01-01",
+            last_updated="2026-05-24",
+            language="en",
+            related=[],
+            parent_topic="Dev",
+            visibility="private",
+            description="Desc",
+            status="ok",
+            last_fetched_at="2026-05-24T12:00:00Z",
+            last_success_at="2026-05-24T11:00:00Z",
+        )
+        self.assertEqual(values["last_success_at"], "2026-05-24T11:00:00Z")
+
+
 if __name__ == "__main__":
     unittest.main()

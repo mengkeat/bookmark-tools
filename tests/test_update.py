@@ -185,6 +185,33 @@ class UpdateBookmarkTest(unittest.TestCase):
                 )
         self.assertIsNone(result)
 
+    def test_update_preserves_original_url(self) -> None:
+        """When updating via final_url, original url is preserved."""
+        with TemporaryDirectory() as tmp:
+            vault_dir, bookmarks_dir = _setup_vault(tmp)
+            env = {
+                "VAULT_PATH": str(vault_dir),
+                "BOOKMARKS_DIR": str(bookmarks_dir),
+            }
+            with (
+                patch.dict(os.environ, env, clear=True),
+                patch(
+                    "bookmark_tools.fetch.urllib.request.urlopen",
+                    side_effect=lambda req, **kw: _fake_urlopen(req, **kw),
+                ),
+                patch("bookmark_tools.summarize.shutil.which", return_value=None),
+            ):
+                result = update_bookmark(
+                    "https://example.com/sample",
+                    bookmarks_dir=bookmarks_dir,
+                    dry_run=True,
+                )
+
+        self.assertIsNotNone(result)
+        _, note_text = result
+        # Original URL should be preserved in the rendered note
+        self.assertIn("url: https://example.com/sample", note_text)
+
     def test_update_writes_to_disk_when_not_dry_run(self) -> None:
         """It writes the updated note to disk."""
         with TemporaryDirectory() as tmp:

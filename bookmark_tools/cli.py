@@ -297,6 +297,14 @@ def build_note(
             (bookmarks_dir / folder) / slugify_filename(str(metadata["title"]))
         )
         existing_note_text = None
+    # When force-overwriting, preserve the original URL for stable identity
+    if existing_note_text:
+        from .note_schema import parse_note_text
+
+        existing_parsed = parse_note_text(existing_note_text)
+        original_url = str(existing_parsed.frontmatter.get("url", "")).strip()
+    else:
+        original_url = None
     archive_path = ""
     if archive:
         archive_path = str(
@@ -306,7 +314,7 @@ def build_note(
         target_path,
         render_note(
             metadata,
-            page_data["url"],
+            original_url or page_data["url"],
             profile,
             final_url=page_data["final_url"],
             canonical_url=page_data.get("canonical_url"),

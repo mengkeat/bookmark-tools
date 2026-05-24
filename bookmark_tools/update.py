@@ -73,6 +73,9 @@ def update_bookmark(
     existing_note_text = note_path.read_text(encoding="utf-8")
     old_metadata, _ = read_frontmatter(note_path)
     old_created = str(old_metadata.get("created", "")).strip()
+    # Preserve the original url — if the user updates via final_url or
+    # canonical_url, the stored url stays the same for stable identity.
+    original_url = str(old_metadata.get("url", "")).strip() or url
     page_data = extract_page_data(url)
     similar_notes = rank_similar_notes(page_data, profile)
     llm_metadata = call_llm(page_data, profile, similar_notes, allow_new_subfolder=True)
@@ -107,7 +110,7 @@ def update_bookmark(
 
     note_text = render_note(
         normalized,
-        page_data["url"],
+        original_url,
         profile,
         created_override=old_created or None,
         final_url=page_data["final_url"],
