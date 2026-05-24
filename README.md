@@ -32,9 +32,9 @@ uv sync
 
 ## Configuration
 
-Settings are currently configured with environment variables. `load_env()` reads `.env` files from the configured vault, the vault parent, the current directory, or the path specified by `BOOKMARK_ENV_FILE`.
+Configuration uses this precedence: CLI overrides (where a command exposes them), environment variables, `bookmark-tools.toml`, then defaults. `load_env()` reads `.env` files from the configured vault, the vault parent, the current directory, or the path specified by `BOOKMARK_ENV_FILE` before commands resolve configuration.
 
-Copy `.env.example` to `.env` and fill in your values:
+Copy `.env.example` to `.env` and fill in your local secrets/paths:
 
 ```bash
 cp .env.example .env
@@ -48,6 +48,33 @@ cp .env.example .env
 
 Alternatively, set `BOOKMARKS_DIR` directly for commands that operate on a bookmark directory.
 
+#### TOML provider config
+
+Optional provider/model settings can live in `bookmark-tools.toml`. The config file is discovered in this order: `BOOKMARK_CONFIG_FILE`, `$VAULT_PATH/Meta/bookmark-tools.toml`, `$VAULT_PATH/bookmark-tools.toml`, then `./bookmark-tools.toml`.
+
+Example:
+
+```toml
+[provider]
+name = "openrouter"
+base_url = "https://openrouter.ai/api/v1"
+# Prefer environment variables for secrets; api_key is supported but not recommended.
+
+[classification]
+model = "openai/gpt-4.1-mini"
+
+[summary]
+model = "openai/gpt-4.1-mini"
+
+[embedding]
+model = "text-embedding-3-small"
+dimensions = 256
+
+[timeouts]
+request_seconds = 20
+summary_seconds = 180
+```
+
 #### Optional overrides and provider settings
 
 | Variable | Description |
@@ -56,11 +83,16 @@ Alternatively, set `BOOKMARKS_DIR` directly for commands that operate on a bookm
 | `BOOKMARK_SEARCH_INDEX` | Override the search database path (default: `$VAULT_PATH/Meta/bookmark-search.sqlite3`) |
 | `BOOKMARK_CLASSIFICATION_GUIDE` | Override the classification guide path |
 | `BOOKMARK_ENV_FILE` | Override the .env file path |
+| `BOOKMARK_CONFIG_FILE` | Override the TOML config file path |
 | `BOOKMARK_LLM_API_KEY`, `OPENAI_API_KEY`, or `OPENROUTER_API_KEY` | Optional API key for LLM classification, LLM summaries, and semantic search embeddings. Without one, bookmark creation falls back to heuristics and semantic search is unavailable. |
-| `BOOKMARK_LLM_MODEL`, `OPENAI_MODEL`, or `MODEL_ID` | Model identifier for classification and LLM summary fallback (default: `gpt-4.1-mini`) |
+| `BOOKMARK_CLASSIFICATION_MODEL`, `BOOKMARK_LLM_MODEL`, `OPENAI_MODEL`, or `MODEL_ID` | Model identifier for classification (default: `gpt-4.1-mini`) |
+| `BOOKMARK_SUMMARY_MODEL` | Optional separate model for direct LLM summary fallback; defaults to the classification model |
 | `BOOKMARK_LLM_BASE_URL` or `OPENAI_BASE_URL` | OpenAI-compatible API base URL |
-| `LLM_PROVIDER` | Set to `openrouter` to default the base URL to OpenRouter when no explicit base URL is configured |
+| `LLM_PROVIDER` or `BOOKMARK_LLM_PROVIDER` | Set to `openrouter` to default the base URL to OpenRouter when no explicit base URL is configured |
 | `BOOKMARK_EMBEDDING_MODEL` | Override the embedding model label stored with embedding rows (default: `text-embedding-3-small`) |
+| `BOOKMARK_EMBEDDING_DIMENSIONS` | Override embedding vector dimensions (default: `256`); changing this requires `bookmark-rebuild` |
+| `BOOKMARK_REQUEST_TIMEOUT` | Timeout in seconds for OpenAI-compatible API requests (default: `20`) |
+| `BOOKMARK_SUMMARY_TIMEOUT` | Timeout in seconds for direct LLM summary fallback (default: `180`) |
 
 ## Usage
 
@@ -290,7 +322,7 @@ The server starts on `http://localhost:5000` in debug mode.
 ## Development
 
 ```bash
-uv run pytest tests/             # Run all tests (312 tests)
+uv run pytest tests/             # Run all tests (320 tests)
 uv run pytest tests/test_web_stats.py tests/test_web_bookmarks.py  # Web tests only
 uv run ruff check bookmark_tools tests   # Lint
 uv run ruff format bookmark_tools tests  # Format
@@ -303,10 +335,12 @@ uv run ruff format bookmark_tools tests  # Format
 - `docs/PHASE0_CHANGES.md` — Phase 0 implementation details
 - `docs/PHASE1B_CHANGES.md` — Phase 1B schema hardening details
 - `docs/PHASE2_CHANGES.md` — Phase 2 doctor/rebuild implementation details
+- `docs/PHASE3_CHANGES.md` — Phase 3 provider/config discipline details
 - `bookmark_tools/` — Main package source code
+- `bookmark_tools/config.py` — TOML/env/default provider, model, dimension, and timeout resolution
 - `bookmark_tools/doctor.py` — Vault health checks, JSON reports, and safe derived-state fixes
 - `bookmark_tools/rebuild.py` — Rebuild derived search/embedding state from Markdown
 - `bookmark_tools/note_schema.py` — Schema v1 parser, renderer, validation, and identity helpers
 - `bookmark_tools/note_filter.py` — Bookmark vs sidecar/non-bookmark filtering for vault scans
 - `bookmark_tools/url_normalize.py` — URL identity and canonicalization
-- `tests/` — Unit and integration tests (312 tests across 22 files)
+- `tests/` — Unit and integration tests (320 tests across 23 files)

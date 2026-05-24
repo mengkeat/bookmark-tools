@@ -97,7 +97,7 @@ The SQLite search database (`BOOKMARK_SEARCH_INDEX`, defaulting under `$VAULT_PA
 
 Commands that update, delete, or reorganize bookmarks should update the derived index when practical, but Markdown remains authoritative if the two diverge. `bookmark-doctor` reports missing, corrupt, stale, or incomplete search state and `bookmark-doctor --fix` can safely rebuild the search index from Markdown.
 
-Embedding rows record the embedding model and vector dimensions used to create them. Semantic search refuses mismatched embedding stores, and `bookmark-doctor` reports model/dimension drift so the store can be rebuilt.
+Embedding rows record the configured embedding model and vector dimensions used to create them. Semantic search refuses mismatched embedding stores, and `bookmark-doctor` reports model/dimension drift so the store can be rebuilt. Provider/model settings are resolved by `bookmark_tools/config.py` from CLI overrides, environment variables, `bookmark-tools.toml`, and defaults.
 
 ## Doctor and rebuild contract
 
