@@ -64,23 +64,27 @@ def check_bookmarks(
     for note_path in iter_bookmark_note_paths(bookmarks_dir):
         metadata = parse_frontmatter(note_path)
         url = str(metadata.get("url", "")).strip()
-        if not url or not (url.startswith("http://") or url.startswith("https://")):
-            continue
+        final_url = str(metadata.get("final_url", "")).strip()
         title = str(metadata.get("title", note_path.stem))
-        status, reason = check_url(url, timeout=timeout)
-        if status == 0 or status >= 400:
-            problems.append(
-                {
-                    "path": note_path,
-                    "url": url,
-                    "title": title,
-                    "status": status,
-                    "reason": reason,
-                }
-            )
-            logger.info("✗ %s → %s (%s)", title, status, reason)
-        else:
-            logger.debug("✓ %s → %s", title, status)
+        urls_to_check = [u for u in [url, final_url] if u and (u.startswith("http://") or u.startswith("https://"))]
+        if not urls_to_check:
+            continue
+        for check_target in urls_to_check:
+            status, reason = check_url(check_target, timeout=timeout)
+            if status == 0 or status >= 400:
+                problems.append(
+                    {
+                        "path": note_path,
+                        "url": check_target,
+                        "title": title,
+                        "status": status,
+                        "reason": reason,
+                    }
+                )
+                logger.info("✗ %s → %s (%s)", title, status, reason)
+                break  # Report first failing URL only
+            else:
+                logger.debug("✓ %s → %s", title, status)
 
     return problems
 

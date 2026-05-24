@@ -19,6 +19,7 @@ def _bookmark_dict(resolved: Path, bookmarks_dir: Path) -> dict:
         "path": str(rel),
         "title": str(metadata.get("title", resolved.stem)),
         "url": str(metadata.get("url", "")),
+        "final_url": str(metadata.get("final_url", "")),
         "folder": str(rel.parent) if str(rel.parent) != "." else "",
         "tags": metadata.get("tags", [])
         if isinstance(metadata.get("tags"), list)

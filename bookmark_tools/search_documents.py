@@ -68,4 +68,19 @@ def collect_search_documents(
                 body=_extract_body_text(note_path),
             )
         )
+        # Also index final_url text for search matching
+        doc = documents[-1]
+        final_url_text = _normalize_metadata_text(metadata.get("final_url"))
+        if final_url_text:
+            documents[-1] = SearchDocument(
+                path=doc.path,
+                url=doc.url,
+                title=doc.title,
+                folder=doc.folder,
+                tags=doc.tags,
+                related=doc.related,
+                parent_topic=doc.parent_topic,
+                description=doc.description,
+                body=f"{doc.body} {final_url_text}".strip(),
+            )
     return documents

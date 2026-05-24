@@ -102,6 +102,7 @@ def update_bookmark(
         page_data["url"],
         profile,
         created_override=old_created or None,
+        final_url=page_data["final_url"],
     )
 
     if not dry_run:
