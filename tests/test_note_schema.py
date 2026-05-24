@@ -260,5 +260,87 @@ class YamlListRoundTripTest(unittest.TestCase):
         self.assertEqual(parsed, ["machine learning", "data science"])
 
 
+class UnknownFieldsPreservationTest(unittest.TestCase):
+    """Tests that unknown/future frontmatter fields survive re-renders."""
+
+    def test_build_schema_v1_values_preserves_unknown_fields(self) -> None:
+        values = build_schema_v1_values(
+            title="Example",
+            url="https://example.com",
+            bookmark_type="article",
+            tags=["python"],
+            created="2026-05-24",
+            last_updated="2026-05-24",
+            language="en",
+            related=[],
+            parent_topic="Dev",
+            visibility="private",
+            description="Desc",
+            existing_metadata={
+                "custom_field": "preserved",
+                "future_tag": ["a", "b"],
+                "url": "https://should-not-override.com",
+            },
+        )
+        self.assertEqual(values["custom_field"], "preserved")
+        self.assertEqual(values["future_tag"], ["a", "b"])
+        # Owned fields should NOT be overridden by existing_metadata
+        self.assertEqual(values["url"], "https://example.com")
+
+    def test_render_schema_v1_includes_unknown_fields(self) -> None:
+        values = {
+            "schema_version": 1,
+            "id": "abc",
+            "title": "Example",
+            "url": "https://example.com",
+            "custom_field": "preserved",
+            "another_unknown": 42,
+        }
+        rendered = render_schema_v1(values, summary="Summary text")
+        self.assertIn("custom_field: preserved", rendered)
+        self.assertIn("another_unknown: 42", rendered)
+
+    def test_full_round_trip_preserves_unknown_fields(self) -> None:
+        """Parse → build → render → parse preserves unknown fields."""
+        original = (
+            "---\n"
+            "schema_version: 1\n"
+            "id: abc123\n"
+            "title: Example\n"
+            "url: https://example.com\n"
+            "custom_author: 'Jane Doe'\n"
+            "rating: 5\n"
+            "---\n\nSummary:\nSome summary.\n"
+        )
+        note = parse_note_text(original)
+        values = build_schema_v1_values(
+            title="Example",
+            url="https://example.com",
+            bookmark_type="article",
+            tags=["python"],
+            created="2026-05-24",
+            last_updated="2026-05-24",
+            language="en",
+            related=[],
+            parent_topic="Dev",
+            visibility="private",
+            description="Desc",
+            existing_metadata=note.frontmatter,
+        )
+        rendered = render_schema_v1(
+            values,
+            summary="New summary",
+            existing_body=note.body,
+            existing_field_order=note.field_order,
+        )
+        # Parse the rendered output
+        reparsed = parse_note_text(rendered)
+        self.assertEqual(reparsed.frontmatter.get("custom_author"), "Jane Doe")
+        # rating is preserved as a scalar string through render/parse cycle
+        self.assertEqual(str(reparsed.frontmatter.get("rating")), "5")
+        # Owned fields should be updated
+        self.assertIn("New summary", rendered)
+
+
 if __name__ == "__main__":
     unittest.main()

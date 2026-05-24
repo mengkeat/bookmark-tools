@@ -123,4 +123,7 @@ def render_note(
             *(existing_note.field_order if existing_note else []),
         ],
         existing_body=existing_body,
+        existing_field_order=existing_note.field_order
+        if existing_note
+        else None,
     )

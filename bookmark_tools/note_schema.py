@@ -49,6 +49,11 @@ SCHEMA_V1_FIELD_ORDER = [
 ]
 
 INTEGER_FIELDS = {"schema_version", "http_status", "source_line"}
+
+# Fields explicitly owned/managed by schema v1. These may be overwritten
+# during render. Any frontmatter key NOT in this set is treated as
+# user/future-owned and preserved verbatim during re-renders.
+OWNED_FIELDS = frozenset(SCHEMA_V1_FIELD_ORDER) | {"summary"}
 YAML_BOOLEAN_LIKE = {
     "true",
     "false",
@@ -309,7 +314,9 @@ def yaml_list(values: Sequence[object]) -> str:
     return "[" + ", ".join(items) + "]"
 
 
-def merge_field_order(*orders: Sequence[str]) -> list[str]:
+def merge_field_order(
+    *orders: Sequence[str], extra_keys: Sequence[str] = ()
+) -> list[str]:
     """Merge schema v1 fields with observed field orders, preserving first use."""
     merged: list[str] = []
     for field in SCHEMA_V1_FIELD_ORDER:
@@ -319,14 +326,26 @@ def merge_field_order(*orders: Sequence[str]) -> list[str]:
         for field in order:
             if field not in merged and field != "summary":
                 merged.append(field)
+    for key in extra_keys:
+        if key not in merged:
+            merged.append(key)
     return merged
 
 
 def render_frontmatter(
-    values: Mapping[str, object], *, field_order: Sequence[str] | None = None
+    values: Mapping[str, object],
+    *,
+    field_order: Sequence[str] | None = None,
+    extra_keys: Sequence[str] = (),
+    existing_field_order: Sequence[str] | None = None,
 ) -> str:
     """Render frontmatter values using schema-aware field ordering."""
-    order = merge_field_order(field_order or [])
+    orders: list[Sequence[str]] = []
+    if field_order:
+        orders.append(field_order)
+    if existing_field_order:
+        orders.append(existing_field_order)
+    order = merge_field_order(*orders, extra_keys=extra_keys)
     lines = ["---"]
     for key in order:
         if key not in values or key == "summary":
@@ -336,6 +355,7 @@ def render_frontmatter(
             lines.append(f"{key}: {yaml_list(value)}")
         else:
             lines.append(f"{key}: {yaml_scalar(value)}")
+    # Append any values not yet rendered (safety net)
     for key, value in values.items():
         if key in order or key == "summary":
             continue
@@ -426,9 +446,17 @@ def render_schema_v1(
     summary: str,
     field_order: Sequence[str] | None = None,
     existing_body: str | None = None,
+    existing_field_order: Sequence[str] | None = None,
 ) -> str:
     """Render a complete schema v1 bookmark note."""
-    frontmatter = render_frontmatter(values, field_order=field_order)
+    # Determine which keys are unknown (not in owned schema) for ordering
+    unknown_keys = [k for k in values if k not in OWNED_FIELDS]
+    frontmatter = render_frontmatter(
+        values,
+        field_order=field_order,
+        extra_keys=unknown_keys,
+        existing_field_order=existing_field_order,
+    )
     summary_body = "Summary:\n" + generated_block("summary", summary)
     human_body = extract_human_body(existing_body or "")
     body = summary_body if not human_body else f"{summary_body}\n\n{human_body}"
@@ -520,4 +548,10 @@ def build_schema_v1_values(
         or str(existing_metadata.get("source_line", "")).strip(),
         "description": description,
     }
+    # Preserve unknown/future frontmatter fields from the existing note.
+    # These are fields not owned by schema v1 and should pass through
+    # unchanged during re-renders and updates.
+    for key, val in existing_metadata.items():
+        if key not in OWNED_FIELDS and key not in values:
+            values[key] = val
     return values
