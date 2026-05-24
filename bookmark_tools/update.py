@@ -12,7 +12,6 @@ from .classify import (
     validate_folder,
 )
 from .cli import (
-    SUMMARY_MODEL_LABEL,
     _classification_model_label,
     configure_logging,
     normalize_metadata,
@@ -86,7 +85,7 @@ def update_bookmark(
     classification_summary = (
         str(llm_metadata.get("summary", "")).strip() if llm_metadata else ""
     )
-    summary_override = generate_summary(
+    summary_override, summary_source = generate_summary(
         page_data["url"],
         page_data,
         classification_summary=classification_summary,
@@ -120,7 +119,7 @@ def update_bookmark(
         http_status=page_data.get("http_status", ""),
         content_type=page_data.get("content_type", ""),
         classification_model=_classification_model_label(llm_metadata is not None),
-        summary_model=SUMMARY_MODEL_LABEL,
+        summary_model=summary_source,
         existing_note_text=existing_note_text,
     )
 

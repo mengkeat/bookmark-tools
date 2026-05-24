@@ -118,9 +118,7 @@ def extract_page_data(url: str) -> PageData:
     language = parser.language or "en"
     # Canonical URL: prefer <link rel="canonical">, then og:url, then final_url
     canonical_url = (
-        parser.canonical_url
-        or parser.meta.get("og:url", "").strip()
-        or final_url
+        parser.canonical_url or parser.meta.get("og:url", "").strip() or final_url
     )
     full_content = clean_html(raw_text)
     return {

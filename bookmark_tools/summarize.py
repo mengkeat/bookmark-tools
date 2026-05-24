@@ -138,12 +138,22 @@ def generate_summary(
     url: str,
     page_data: PageData,
     classification_summary: str | None = None,
-) -> str:
-    """Generate summary with summarize tool, then classifier output, then fallbacks."""
+) -> tuple[str, str]:
+    """Generate summary with summarize tool, then classifier output, then fallbacks.
+
+    Returns a (summary_text, source_label) tuple where source_label is one of:
+    ``"summarize"``, ``"classifier"``, ``"llm"``, or ``"heuristic"``.
+    """
     normalized_classification_summary = (classification_summary or "").strip()
+    tool_summary = summarize_with_tool(url)
+    if tool_summary:
+        return tool_summary, "summarize"
+    if normalized_classification_summary:
+        return normalized_classification_summary, "classifier"
+    llm_summary = summarize_with_llm(page_data)
+    if llm_summary:
+        return llm_summary, "llm"
     return (
-        summarize_with_tool(url)
-        or normalized_classification_summary
-        or summarize_with_llm(page_data)
-        or infer_summary(page_data["description"], page_data["content"])
+        infer_summary(page_data["description"], page_data["content"]),
+        "heuristic",
     )

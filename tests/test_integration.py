@@ -541,13 +541,13 @@ class BatchImportTest(unittest.TestCase):
         """It skips normalized duplicates before batch workers start."""
         urls = _dedupe_batch_urls(
             [
-                "HTTPS://Example.com:443/path/",
-                "https://example.com/path",
-                "https://example.com/other",
+                ("HTTPS://Example.com:443/path/", "", 1),
+                ("https://example.com/path", "", 2),
+                ("https://example.com/other", "", 3),
             ]
         )
         self.assertEqual(
-            urls,
+            [u for u, _, _ in urls],
             ["HTTPS://Example.com:443/path/", "https://example.com/other"],
         )
 
@@ -564,7 +564,8 @@ class BatchImportTest(unittest.TestCase):
                 "https://example.com/page3\n",
                 encoding="utf-8",
             )
-            urls = _read_urls_from_file(str(url_file))
+            url_tuples = _read_urls_from_file(str(url_file))
+        urls = [u for u, _, _ in url_tuples]
         self.assertEqual(
             urls,
             [
@@ -573,6 +574,11 @@ class BatchImportTest(unittest.TestCase):
                 "https://example.com/page3",
             ],
         )
+        # Verify source provenance is tracked
+        self.assertEqual(url_tuples[0][1], str(url_file))
+        self.assertEqual(url_tuples[0][2], 2)  # line 2 (after comment)
+        self.assertEqual(url_tuples[1][2], 4)  # line 4 (after blank)
+        self.assertEqual(url_tuples[2][2], 6)  # line 6 (after comment)
 
     def test_batch_import_processes_multiple_urls(self) -> None:
         """--file flag processes multiple URLs from a file."""

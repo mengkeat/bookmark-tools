@@ -233,6 +233,9 @@ def build_note(
     profile: BookmarkProfile | None = None,
     bookmarks_dir: Path | None = None,
     archive: bool = False,
+    source_kind: str = "url",
+    source_path: str = "",
+    source_line: int = 0,
 ) -> tuple[Path, str, str]:
     """Build the target note path, rendered note text, and folder decision message."""
     if bookmarks_dir is None:
@@ -267,7 +270,7 @@ def build_note(
         str(llm_metadata.get("summary", "")).strip() if llm_metadata else ""
     )
     logger.info("Generating summary…")
-    summary_override = generate_summary(
+    summary_override, summary_source = generate_summary(
         page_data["url"],
         page_data,
         classification_summary=classification_summary,
@@ -324,7 +327,10 @@ def build_note(
             content_type=page_data.get("content_type", ""),
             archive_path=archive_path,
             classification_model=_classification_model_label(llm_metadata is not None),
-            summary_model=SUMMARY_MODEL_LABEL,
+            summary_model=summary_source,
+            source_kind=source_kind,
+            source_path=source_path,
+            source_line=source_line,
             existing_note_text=existing_note_text,
         ),
         folder_message,
@@ -413,17 +419,22 @@ def configure_logging(*, verbose: bool = False, quiet: bool = False) -> None:
     )
 
 
-def _read_urls_from_file(file_path: str) -> list[str]:
-    """Read URLs from a file (one per line) or stdin when path is '-'."""
+def _read_urls_from_file(file_path: str) -> list[tuple[str, int]]:
+    """Read URLs from a file (one per line) or stdin when path is '-'.
+
+    Returns a list of (url, line_number) tuples.
+    """
     import sys
 
     if file_path == "-":
         lines = sys.stdin.read().splitlines()
+        source = "stdin"
     else:
         lines = Path(file_path).read_text(encoding="utf-8").splitlines()
+        source = file_path
     return [
-        line.strip()
-        for line in lines
+        (line.strip(), source, lineno + 1)
+        for lineno, line in enumerate(lines)
         if line.strip() and not line.strip().startswith("#")
     ]
 
@@ -467,39 +478,41 @@ class BatchFailure:
         self.reason = reason
 
 
-def _dedupe_batch_urls(urls: list[str]) -> list[str]:
+def _dedupe_batch_urls(
+    urls: list[tuple[str, str, int]],
+) -> list[tuple[str, str, int]]:
     """Return URLs deduplicated by normalized identity while preserving order."""
     seen: set[str] = set()
-    unique_urls: list[str] = []
-    for url in urls:
+    unique_urls: list[tuple[str, str, int]] = []
+    for url, source_path, source_line in urls:
         normalized = normalize_url(url)
         if normalized in seen:
             logger.warning("Skipping duplicate URL in batch: %s", url)
             continue
         seen.add(normalized)
-        unique_urls.append(url)
+        unique_urls.append((url, source_path, source_line))
     return unique_urls
 
 
 def _filter_existing_batch_urls(
-    urls: list[str],
+    urls: list[tuple[str, str, int]],
     *,
     force: bool,
     failures_list: list[BatchFailure],
     profile: BookmarkProfile,
-) -> list[str]:
+) -> list[tuple[str, str, int]]:
     """Skip URLs already present in the vault before starting batch workers."""
     if force:
         return urls
-    pending: list[str] = []
-    for url in urls:
+    pending: list[tuple[str, str, int]] = []
+    for url, source_path, source_line in urls:
         existing = profile.url_index.get(normalize_url(url))
         if existing:
             reason = f"Bookmark already exists: {existing}"
             logger.warning("%s — skipping %s", reason, url)
             failures_list.append(BatchFailure(url, reason))
             continue
-        pending.append(url)
+        pending.append((url, source_path, source_line))
     return pending
 
 
@@ -514,6 +527,9 @@ def _process_single_url(
     failures_list: list[BatchFailure] | None = None,
     profile: BookmarkProfile | None = None,
     bookmarks_dir: Path | None = None,
+    source_kind: str = "url",
+    source_path: str = "",
+    source_line: int = 0,
 ) -> int:
     """Process one URL through the bookmark pipeline. Returns 0 on success, 1 on error."""
     try:
@@ -524,6 +540,9 @@ def _process_single_url(
             profile=profile,
             bookmarks_dir=bookmarks_dir,
             archive=archive,
+            source_kind=source_kind,
+            source_path=source_path,
+            source_line=source_line,
         )
     except BookmarkExistsError as exc:
         logger.warning("%s — skipping %s", exc, url)
@@ -615,8 +634,11 @@ def main() -> int:
                         failures_list=batch_failures,
                         profile=batch_profile,
                         bookmarks_dir=bookmarks_dir,
+                        source_kind="file",
+                        source_path=source,
+                        source_line=line,
                     )
-                    for url in urls
+                    for url, source, line in urls
                 ]
                 results = [f.result() for f in futures]
             failure_count = sum(results)
@@ -632,8 +654,11 @@ def main() -> int:
                     failures_list=batch_failures,
                     profile=batch_profile,
                     bookmarks_dir=bookmarks_dir,
+                    source_kind="file",
+                    source_path=source,
+                    source_line=line,
                 )
-                for url in urls
+                for url, source, line in urls
             )
         total_failures = preflight_failure_count + failure_count
         total = len(urls) + preflight_failure_count

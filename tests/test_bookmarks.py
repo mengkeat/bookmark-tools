@@ -118,12 +118,13 @@ class BookmarkHelpersTest(unittest.TestCase):
             patch("bookmark_tools.summarize.summarize_with_tool", return_value=None),
             patch("bookmark_tools.summarize.summarize_with_llm") as mocked_summary_llm,
         ):
-            summary = generate_summary(
+            summary, source = generate_summary(
                 "https://example.com",
                 page_data,
                 classification_summary="Classifier summary.",
             )
         self.assertEqual(summary, "Classifier summary.")
+        self.assertEqual(source, "classifier")
         mocked_summary_llm.assert_not_called()
 
     def test_generate_summary_falls_back_to_inferred_summary(self) -> None:
@@ -139,8 +140,9 @@ class BookmarkHelpersTest(unittest.TestCase):
             patch("bookmark_tools.summarize.summarize_with_tool", return_value=None),
             patch("bookmark_tools.summarize.summarize_with_llm", return_value=None),
         ):
-            summary = generate_summary("https://example.com", page_data)
+            summary, source = generate_summary("https://example.com", page_data)
         self.assertEqual(summary, "Sentence one. Sentence two.")
+        self.assertEqual(source, "heuristic")
 
     def test_normalize_metadata_applies_defaults(self) -> None:
         """It fills required metadata fields and normalizes list values."""
