@@ -16,6 +16,7 @@ bookmark-check = "bookmark_tools.check:main"
 bookmark-stats = "bookmark_tools.stats:main"
 bookmark-update = "bookmark_tools.update:main"
 bookmark-delete = "bookmark_tools.delete:main"
+bookmark-doctor = "bookmark_tools.doctor:main"
 bookmark-rebuild = "bookmark_tools.rebuild:main"
 bookmark-reorg = "bookmark_tools.reorg:main"
 
