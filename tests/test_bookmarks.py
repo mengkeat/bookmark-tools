@@ -333,6 +333,26 @@ class BookmarkHelpersTest(unittest.TestCase):
             profile.url_index.get("https://example.com/full-article"), note_path
         )
 
+    def test_collect_existing_notes_indexes_canonical_urls(self) -> None:
+        """It indexes canonical_url fields alongside url/final_url."""
+        with TemporaryDirectory() as tmp:
+            bookmarks = Path(tmp) / "Bookmarks" / "Development"
+            bookmarks.mkdir(parents=True)
+            note_path = bookmarks / "sample.md"
+            note_path.write_text(
+                "---\n"
+                "url: https://short.link/abc\n"
+                "final_url: https://example.com/redirected\n"
+                "canonical_url: https://example.com/canonical\n"
+                "title: Sample\n"
+                "---\n",
+                encoding="utf-8",
+            )
+            profile = collect_existing_notes(bookmarks_dir=Path(tmp) / "Bookmarks")
+        self.assertEqual(
+            profile.url_index.get("https://example.com/canonical"), note_path
+        )
+
     def test_collect_existing_notes_prefers_url_over_final_url_in_index(self) -> None:
         """When url and final_url collide, url wins in the index."""
         with TemporaryDirectory() as tmp:

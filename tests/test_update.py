@@ -135,6 +135,41 @@ class UpdateBookmarkTest(unittest.TestCase):
         # Should preserve original created date
         self.assertIn("created: 2025-01-15", note_text)
 
+    def test_update_preserves_human_notes_section(self) -> None:
+        """It migrates legacy notes to schema v1 while preserving human notes."""
+        with TemporaryDirectory() as tmp:
+            vault_dir, bookmarks_dir = _setup_vault(tmp)
+            note_path = bookmarks_dir / "ML-AI" / "sample-article.md"
+            note_path.write_text(
+                note_path.read_text(encoding="utf-8")
+                + "\n## Notes\nKeep my personal annotation.\n",
+                encoding="utf-8",
+            )
+            env = {
+                "VAULT_PATH": str(vault_dir),
+                "BOOKMARKS_DIR": str(bookmarks_dir),
+            }
+            with (
+                patch.dict(os.environ, env, clear=True),
+                patch(
+                    "bookmark_tools.fetch.urllib.request.urlopen",
+                    side_effect=lambda req, **kw: _fake_urlopen(req, **kw),
+                ),
+                patch("bookmark_tools.summarize.shutil.which", return_value=None),
+            ):
+                result = update_bookmark(
+                    "https://example.com/sample",
+                    bookmarks_dir=bookmarks_dir,
+                    dry_run=True,
+                )
+
+        self.assertIsNotNone(result)
+        _, note_text = result
+        self.assertIn("schema_version: 1", note_text)
+        self.assertIn("id:", note_text)
+        self.assertIn("## Notes\nKeep my personal annotation.", note_text)
+        self.assertNotIn("Original summary.", note_text)
+
     def test_update_returns_none_for_missing_url(self) -> None:
         """It returns None when the URL is not bookmarked."""
         with TemporaryDirectory() as tmp:
