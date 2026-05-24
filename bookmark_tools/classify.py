@@ -44,14 +44,22 @@ class SimilarNote:
 
 
 def find_existing_url(url: str, profile: BookmarkProfile | None = None) -> Path | None:
-    """Return the existing note path for a URL if it is already bookmarked."""
+    """Return the existing note path for a URL if it is already bookmarked.
+
+    Checks the profile's url_index which indexes both url and final_url
+    fields from existing notes.
+    """
     normalized = normalize_url(url)
     if profile:
         return profile.url_index.get(normalized)
     bookmarks_dir = require_bookmarks_dir()
     for note_path in iter_bookmark_note_paths(bookmarks_dir):
-        existing_url = normalize_url(str(parse_frontmatter(note_path).get("url", "")))
+        metadata = parse_frontmatter(note_path)
+        existing_url = normalize_url(str(metadata.get("url", "")))
         if existing_url == normalized:
+            return note_path
+        existing_final_url = normalize_url(str(metadata.get("final_url", "")))
+        if existing_final_url and existing_final_url == normalized:
             return note_path
     return None
 

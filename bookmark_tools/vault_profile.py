@@ -186,6 +186,9 @@ def collect_existing_notes(
         existing_url = normalize_url(str(metadata.get("url", "")))
         if existing_url and existing_url not in url_index:
             url_index[existing_url] = note_path
+        existing_final_url = normalize_url(str(metadata.get("final_url", "")))
+        if existing_final_url and existing_final_url not in url_index:
+            url_index[existing_final_url] = note_path
         folder = str(note_path.relative_to(bookmarks_dir).parent)
         folder = "" if folder == "." else folder
         title = str(metadata.get("title", note_path.stem))

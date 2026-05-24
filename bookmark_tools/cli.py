@@ -235,6 +235,13 @@ def build_note(
     logger.info("Fetching page content from %s…", url)
     page_data = extract_page_data(url)
     logger.info("Page fetched: %s", page_data["title"])
+    # Check if the redirect target is already bookmarked
+    if not existing and page_data["final_url"] != page_data["url"]:
+        existing_by_final = find_existing_url(page_data["final_url"], profile)
+        if existing_by_final and not force:
+            raise BookmarkExistsError(
+                f"Bookmark already exists (redirect of {url}): {existing_by_final}"
+            )
     similar_notes = rank_similar_notes(page_data, profile)
     logger.info("Classifying bookmark with LLM…")
     llm_metadata = call_llm(page_data, profile, similar_notes, allow_new_subfolder)
