@@ -1,9 +1,7 @@
 from __future__ import annotations
 
-import csv
 import datetime as dt
 import hashlib
-import io
 import json
 import re
 import urllib.parse
@@ -137,20 +135,73 @@ def split_frontmatter(text: str) -> tuple[str, str]:
 
 
 def _parse_inline_list(value: str) -> list[str]:
-    """Parse a simple YAML-style inline string list."""
+    """Parse a YAML flow sequence (``[a, 'b', "c"]``) into a list of strings.
+
+    Supports three scalar forms:
+    - plain (unquoted): terminated by ``,`` or ``]``
+    - single-quoted: ``'value'`` with ``''`` as escaped literal quote
+    - double-quoted: ``"value"`` with JSON-style escapes
+    """
     if not (value.startswith("[") and value.endswith("]")):
         return []
     inner = value[1:-1].strip()
     if not inner:
         return []
-    reader = csv.reader(io.StringIO(inner), skipinitialspace=True)
-    try:
-        row = next(reader)
-    except csv.Error:
-        return [item.strip().strip("'").strip('"') for item in inner.split(",")]
-    return [
-        str(item).strip().strip("'").strip('"') for item in row if str(item).strip()
-    ]
+    items: list[str] = []
+    pos = 0
+    length = len(inner)
+    while pos < length:
+        # skip leading whitespace
+        while pos < length and inner[pos] in " \t":
+            pos += 1
+        if pos >= length:
+            break
+        ch = inner[pos]
+        if ch == "'":
+            # single-quoted scalar
+            pos += 1
+            parts: list[str] = []
+            while pos < length:
+                if inner[pos] == "'":
+                    if pos + 1 < length and inner[pos + 1] == "'":
+                        parts.append("'")
+                        pos += 2
+                    else:
+                        pos += 1
+                        break
+                else:
+                    parts.append(inner[pos])
+                    pos += 1
+            items.append("".join(parts))
+        elif ch == '"':
+            # double-quoted scalar — use JSON semantics
+            pos += 1
+            start = pos
+            while pos < length and inner[pos] != '"':
+                if inner[pos] == "\\":
+                    pos += 1  # skip escaped char
+                pos += 1
+            raw = inner[start:pos]
+            if pos < length:
+                pos += 1  # skip closing quote
+            try:
+                items.append(json.loads('"' + raw + '"'))
+            except json.JSONDecodeError:
+                items.append(raw.replace('\\"', '"').replace("\\\\", "\\"))
+        else:
+            # plain scalar — read until comma or end
+            start = pos
+            while pos < length and inner[pos] != ",":
+                pos += 1
+            text = inner[start:pos].strip()
+            if text:
+                items.append(text)
+        # skip trailing whitespace and comma
+        while pos < length and inner[pos] in " \t":
+            pos += 1
+        if pos < length and inner[pos] == ",":
+            pos += 1
+    return items
 
 
 def _parse_scalar(key: str, value: str) -> object:

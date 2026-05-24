@@ -187,5 +187,78 @@ class NoteSchemaRenderTest(unittest.TestCase):
         self.assertEqual(timeline, "- 2026-05-24T00:00:00Z: ok (HTTP 200)")
 
 
+class YamlListRoundTripTest(unittest.TestCase):
+    """Tests that inline YAML lists survive render → parse round-trips."""
+
+    def _round_trip(self, tags: list[str]) -> list[str]:
+        from bookmark_tools.note_schema import _parse_inline_list, yaml_list
+
+        rendered = yaml_list(tags)
+        return _parse_inline_list(rendered)
+
+    def test_comma_in_value(self) -> None:
+        self.assertEqual(
+            self._round_trip(["tag,with-comma", "other"]),
+            ["tag,with-comma", "other"],
+        )
+
+    def test_boolean_like_values(self) -> None:
+        for val in ("true", "false", "yes", "no", "on", "off", "null"):
+            with self.subTest(val=val):
+                self.assertEqual(self._round_trip([val]), [val])
+
+    def test_brackets_in_value(self) -> None:
+        self.assertEqual(
+            self._round_trip(["val[0]", "val[1]"]),
+            ["val[0]", "val[1]"],
+        )
+
+    def test_urls(self) -> None:
+        self.assertEqual(
+            self._round_trip(["https://example.com/path"]),
+            ["https://example.com/path"],
+        )
+
+    def test_empty_list(self) -> None:
+        self.assertEqual(self._round_trip([]), [])
+
+    def test_single_quoted_scalar_round_trips(self) -> None:
+        """Values that need quoting in YAML render correctly."""
+        from bookmark_tools.note_schema import _parse_inline_list, yaml_list
+
+        rendered = yaml_list(["Example: with colon", "tag,with-comma"])
+        self.assertIn("'", rendered)
+        parsed = _parse_inline_list(rendered)
+        self.assertEqual(parsed, ["Example: with colon", "tag,with-comma"])
+
+    def test_double_quoted_scalar_round_trips(self) -> None:
+        """Double-quoted scalars with unicode parse correctly."""
+        from bookmark_tools.note_schema import parse_frontmatter_text
+
+        data, _ = parse_frontmatter_text('tags: ["Café", "Test"]')
+        self.assertEqual(data["tags"], ["Café", "Test"])
+
+    def test_single_quote_escape_in_list(self) -> None:
+        from bookmark_tools.note_schema import _parse_inline_list
+
+        parsed = _parse_inline_list("['it''s', 'rock ''n'' roll']")
+        self.assertEqual(parsed, ["it's", "rock 'n' roll"])
+
+    def test_frontmatter_tags_round_trip(self) -> None:
+        """Tags rendered in frontmatter survive a full parse cycle."""
+        from bookmark_tools.note_schema import parse_frontmatter_text, yaml_list
+
+        original = ["python", "ai/ml", "tag,with-comma", "true"]
+        rendered = yaml_list(original)
+        data, _ = parse_frontmatter_text(f"tags: {rendered}")
+        self.assertEqual(data["tags"], original)
+
+    def test_plain_scalars_with_spaces(self) -> None:
+        from bookmark_tools.note_schema import _parse_inline_list
+
+        parsed = _parse_inline_list("[machine learning, data science]")
+        self.assertEqual(parsed, ["machine learning", "data science"])
+
+
 if __name__ == "__main__":
     unittest.main()
