@@ -27,9 +27,9 @@ A bookmark note is a Markdown file in `BOOKMARKS_DIR` with YAML-like frontmatter
 schema_version: 1
 id: <sha256(normalized original url)>
 title: Example
-url: https://example.com
-final_url: https://example.com
-canonical_url: https://example.com
+url: https://example.com          # Original URL from user input
+final_url: https://example.com    # URL after HTTP redirects
+canonical_url: https://example.com  # From <link rel="canonical"> or og:url
 domain: example.com
 type: article
 tags: [example]
@@ -45,11 +45,11 @@ visibility: private
 status: ok
 http_status: 200
 content_type: text/html
-content_hash: <sha256(fetched text)>
+content_hash: <sha256(full cleaned text)>
 archive_path:
 classification_model: heuristic
 classification_prompt_version: v1
-summary_model: summary-pipeline-v1
+summary_model: heuristic
 source_kind: url
 source_path:
 source_line:
@@ -58,6 +58,32 @@ description: Example description
 ```
 
 The body starts with a generated `Summary:` block using explicit `bookmark-tools` markers. Human-authored sections such as `## Notes` live outside generated blocks and are preserved by update/migration flows. Existing legacy notes without `schema_version` remain readable through tolerant parsing.
+
+## Data preservation guarantees
+
+Schema v1 notes are designed for safe round-trips through update and forced overwrite:
+
+- **Unknown fields preserved**: Frontmatter keys not owned by schema v1 (e.g., user-added `rating` or future `custom_field`) are carried forward unchanged during re-renders. Only `OWNED_FIELDS` (the 30 schema v1 keys) are overwritten.
+- **Human body preserved**: Sections like `## Notes` outside generated blocks survive updates and force-overwrites. The `extract_human_body()` helper strips generated blocks and legacy `Summary:` paragraphs but keeps user content.
+- **Original URL preserved**: On update or `--force`, the `url` field is kept from the existing note. Updates triggered via `final_url` or `canonical_url` do not change the original URL or stable ID.
+- **Timestamp semantics**: `last_fetched_at` refreshes on every fetch attempt. `last_success_at` refreshes on successful fetches and is preserved on failures. `added_at` and `created` are never overwritten.
+- **Content hash**: `content_hash` is the SHA-256 of the full cleaned page text (not the 8 KB classification preview), enabling accurate change detection.
+- **Canonical URL**: Resolved from `<link rel="canonical">`, then `og:url`, then `final_url`. Stored as a separate identity hint.
+
+## Schema validation
+
+`validate_schema_v1(metadata)` checks frontmatter for:
+
+- Missing required fields (`schema_version`, `id`, `url`, `title`, `created`, `last_updated`)
+- Invalid stable ID format (must be 64-char hex SHA-256)
+- Unsupported `schema_version`
+- Malformed URL fields
+- Domain / canonical_url hostname mismatch
+- Invalid date/timestamp formats
+- Invalid HTTP status codes
+- Invalid content_hash format
+
+Returns a list of `SchemaIssue` records with severity (`"error"` or `"warning"`). Designed for consumption by `bookmark-doctor` (Phase 2).
 
 ## Archive sidecars
 

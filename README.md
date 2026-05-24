@@ -4,11 +4,12 @@ CLI tools for fetching, classifying, summarizing, and searching bookmarks in an 
 
 ## Features
 
+- **Schema v1 bookmark notes**: Self-describing notes with stable IDs, fetch metadata, content hashes, canonical URLs, and source provenance. See `docs/SYSTEM_OF_RECORD.md` for the full schema.
 - **Bookmark creation**: Fetch a web page, classify it with LLM (or heuristic fallback), generate a summary, and write a structured markdown note to your vault.
-- **Batch import**: Import multiple URLs from a file or stdin with `--file`/`-f`.
+- **Batch import**: Import multiple URLs from a file or stdin with `--file`/`-f`. Source file and line number are recorded for provenance.
 - **Interactive mode**: Review and confirm classification before writing with `--interactive`/`-i`.
 - **Content archiving**: Save a cleaned copy of page content alongside the bookmark with `--archive`; archive sidecars are ignored by bookmark scans and search indexing.
-- **Bookmark update**: Re-fetch and re-classify existing bookmarks with `bookmark-update`, preserving creation date. Supports `--all` and `--folder` for bulk updates.
+- **Bookmark update**: Re-fetch and re-classify existing bookmarks with `bookmark-update`, preserving creation date, original URL, human notes, and unknown frontmatter. Supports `--all` and `--folder` for bulk updates.
 - **Bookmark deletion**: Delete bookmarks by URL or file path with `bookmark-delete`, cleaning up search index and embeddings.
 - **Search**: BM25 keyword search, semantic vector search, or hybrid search with context snippets. Filter by `--tag`, export as JSON/CSV.
 - **Link health checking**: Validate all bookmarked URLs with `bookmark-check` to find dead links.
@@ -16,6 +17,7 @@ CLI tools for fetching, classifying, summarizing, and searching bookmarks in an 
 - **Folder reorganization**: Propose folder reclassifications with `bookmark-reorg`.
 - **Tag normalization**: Consistent lowercase kebab-case tags with abbreviation alias resolution.
 - **Related-topic metadata**: Populate `related` and `parent_topic` fields from LLM or heuristic signals.
+- **Schema validation**: `validate_schema_v1()` checks required fields, stable ID format, URL validity, domain consistency, and timestamp formats — ready for `bookmark-doctor` health checks.
 - **Small dependency set**: Core tooling is mostly stdlib; Flask powers the web UI and NumPy accelerates vector similarity.
 
 ## Installation
@@ -193,10 +195,26 @@ Bookmark Markdown notes are the canonical system of record; search indexes, embe
 
 ### Summary fallback chain
 
-1. External `summarize` CLI (if available)
-2. Classifier-provided summary from LLM
-3. Direct LLM summarization
-4. Heuristic fallback (description or first sentences)
+Each source is recorded in the `summary_model` frontmatter field for provenance:
+
+1. External `summarize` CLI (if available) → `"summarize"`
+2. Classifier-provided summary from LLM → `"classifier"`
+3. Direct LLM summarization → `"llm"`
+4. Heuristic fallback (description or first sentences) → `"heuristic"`
+
+### Data preservation on update
+
+When updating or force-overwriting an existing bookmark:
+
+- The original `url` field is always preserved (updates via `final_url` or `canonical_url` do not change it)
+- Human-authored sections like `## Notes` are preserved
+- Unknown frontmatter fields (not owned by schema v1) are carried forward
+- `last_success_at` refreshes on successful fetch; preserved on failure
+- `content_hash` uses the full fetched content (not the truncated preview)
+
+### Canonical URL resolution
+
+`canonical_url` is resolved in order: `<link rel="canonical">` → `og:url` → `final_url`. The three URL fields (`url`, `final_url`, `canonical_url`) serve distinct purposes: identity, redirect tracking, and canonical reference.
 
 ## Web interface
 
@@ -239,7 +257,7 @@ The server starts on `http://localhost:5000` in debug mode.
 ## Development
 
 ```bash
-uv run pytest tests/             # Run all tests (CLI + web)
+uv run pytest tests/             # Run all tests (300 tests)
 uv run pytest tests/test_web_stats.py tests/test_web_bookmarks.py  # Web tests only
 uv run ruff check bookmark_tools tests   # Lint
 uv run ruff format bookmark_tools tests  # Format
@@ -249,5 +267,10 @@ uv run ruff format bookmark_tools tests  # Format
 
 - `AGENTS.md` — Detailed code structure and module documentation for coding agents
 - `docs/SYSTEM_OF_RECORD.md` — Defines canonical vs derived data categories
+- `docs/PHASE0_CHANGES.md` — Phase 0 implementation details
+- `docs/PHASE1B_CHANGES.md` — Phase 1B schema hardening details
 - `bookmark_tools/` — Main package source code
-- `tests/` — Unit and integration tests
+- `bookmark_tools/note_schema.py` — Schema v1 parser, renderer, validation, and identity helpers
+- `bookmark_tools/note_filter.py` — Bookmark vs sidecar/non-bookmark filtering for vault scans
+- `bookmark_tools/url_normalize.py` — URL identity and canonicalization
+- `tests/` — Unit and integration tests (300 tests across 20 files)
