@@ -43,8 +43,8 @@ related: [example]
 parent_topic: Bookmarks
 visibility: private
 status: ok
-http_status:
-content_type:
+http_status: 200
+content_type: text/html
 content_hash: <sha256(fetched text)>
 archive_path:
 classification_model: heuristic
