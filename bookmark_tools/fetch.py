@@ -103,7 +103,8 @@ def extract_page_data(url: str) -> PageData:
     )
     language = parser.language or "en"
     return {
-        "url": final_url,
+        "url": url,
+        "final_url": final_url,
         "title": title or urllib.parse.urlparse(final_url).netloc,
         "description": description,
         "language": language,

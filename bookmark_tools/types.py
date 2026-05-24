@@ -4,7 +4,8 @@ from typing import TypedDict
 
 
 class PageData(TypedDict):
-    url: str
+    url: str  # Original URL as provided by the user
+    final_url: str  # URL after following HTTP redirects
     title: str
     description: str
     language: str
