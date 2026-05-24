@@ -4,6 +4,7 @@ import csv
 import datetime as dt
 import hashlib
 import io
+import json
 import re
 import urllib.parse
 from collections.abc import Mapping, Sequence
@@ -163,7 +164,10 @@ def _parse_scalar(key: str, value: str) -> object:
         inner = value[1:-1]
         if quote == "'":
             return inner.replace("''", "'")
-        return bytes(inner, "utf-8").decode("unicode_escape")
+        try:
+            return json.loads(value)
+        except json.JSONDecodeError:
+            return inner.replace('\\"', '"').replace("\\\\", "\\")
     if key in INTEGER_FIELDS and value.isdigit():
         return int(value)
     return value

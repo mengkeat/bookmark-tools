@@ -45,6 +45,10 @@ class NoteSchemaParseTest(unittest.TestCase):
         self.assertEqual(note.field_order[:2], ["schema_version", "url"])
         self.assertIn("Summary:", note.body)
 
+    def test_parse_double_quoted_unicode_scalar(self) -> None:
+        note = parse_note_text('---\ntitle: "Café"\nurl: https://example.com\n---\n')
+        self.assertEqual(note.frontmatter["title"], "Café")
+
     def test_identifies_sidecar_as_non_bookmark(self) -> None:
         with TemporaryDirectory() as tmp:
             sidecar = Path(tmp) / "sample.content.md"
