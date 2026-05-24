@@ -842,5 +842,148 @@ class ForceOverwriteTest(unittest.TestCase):
                     )
 
 
-if __name__ == "__main__":
-    unittest.main()
+class OriginalVsFinalUrlTest(unittest.TestCase):
+    """Tests for storing original and final URLs separately."""
+
+    def test_build_note_preserves_original_url_in_frontmatter(self) -> None:
+        """The url field in frontmatter is the user-provided URL, not the redirect."""
+        redirect_html = SAMPLE_HTML
+
+        def urlopen_with_redirect(request, **kw):
+            url = request.full_url if hasattr(request, "full_url") else str(request)
+            if "/chat/completions" in url:
+                body = json.dumps(SAMPLE_LLM_RESPONSE).encode("utf-8")
+            else:
+                body = redirect_html.encode("utf-8")
+
+            class FakeResp:
+                def __init__(self, d, u):
+                    self._data, self._url = d, u
+                    self.headers = _FakeHeaders()
+
+                def read(self, n=-1):
+                    return self._data if n == -1 else self._data[:n]
+
+                def geturl(self):
+                    return "https://example.com/final-redirected-page"
+
+                def __enter__(self):
+                    return self
+
+                def __exit__(self, *a):
+                    pass
+
+            return FakeResp(body, url)
+
+        with TemporaryDirectory() as tmp:
+            vault_dir, bookmarks_dir = _setup_vault(tmp)
+            env = {
+                "VAULT_PATH": str(vault_dir),
+                "BOOKMARKS_DIR": str(bookmarks_dir),
+                "BOOKMARK_LLM_API_KEY": "test-key",
+                "BOOKMARK_LLM_BASE_URL": "https://fake-llm.test/v1",
+            }
+            with (
+                patch.dict(os.environ, env, clear=True),
+                patch(
+                    "bookmark_tools.fetch.urllib.request.urlopen",
+                    side_effect=urlopen_with_redirect,
+                ),
+                patch(
+                    "bookmark_tools.classify.urllib.request.urlopen",
+                    side_effect=urlopen_with_redirect,
+                ),
+                patch("bookmark_tools.summarize.shutil.which", return_value=None),
+                patch("bookmark_tools.summarize.summarize_with_llm", return_value=None),
+            ):
+                target_path, note_text, _ = build_note(
+                    "https://short.link/abc123",
+                    allow_new_subfolder=True,
+                )
+
+            # url should be the original user-provided URL
+            self.assertIn("url: https://short.link/abc123", note_text)
+            # final_url should be the redirected URL
+            self.assertIn(
+                "final_url: https://example.com/final-redirected-page", note_text
+            )
+
+    def test_build_note_no_final_url_when_no_redirect(self) -> None:
+        """When URL does not redirect, no final_url field appears."""
+        with TemporaryDirectory() as tmp:
+            vault_dir, bookmarks_dir = _setup_vault(tmp)
+            env = {
+                "VAULT_PATH": str(vault_dir),
+                "BOOKMARKS_DIR": str(bookmarks_dir),
+                "BOOKMARK_LLM_API_KEY": "test-key",
+                "BOOKMARK_LLM_BASE_URL": "https://fake-llm.test/v1",
+            }
+            with (
+                patch.dict(os.environ, env, clear=True),
+                patch(
+                    "bookmark_tools.fetch.urllib.request.urlopen",
+                    side_effect=lambda req, **kw: _fake_urlopen(req, **kw),
+                ),
+                patch(
+                    "bookmark_tools.classify.urllib.request.urlopen",
+                    side_effect=lambda req, **kw: _fake_urlopen(req, **kw),
+                ),
+                patch("bookmark_tools.summarize.shutil.which", return_value=None),
+                patch("bookmark_tools.summarize.summarize_with_llm", return_value=None),
+            ):
+                target_path, note_text, _ = build_note(
+                    "https://example.com/sample-page",
+                    allow_new_subfolder=True,
+                )
+
+            self.assertIn("url: https://example.com/sample-page", note_text)
+            self.assertNotIn("final_url", note_text)
+
+    def test_build_note_detects_duplicate_via_redirect(self) -> None:
+        """build_note raises BookmarkExistsError when redirect target is already bookmarked."""
+
+        def urlopen_with_redirect(request, **kw):
+            url = request.full_url if hasattr(request, "full_url") else str(request)
+            if "/chat/completions" in url:
+                body = json.dumps(SAMPLE_LLM_RESPONSE).encode("utf-8")
+            else:
+                body = SAMPLE_HTML.encode("utf-8")
+
+            class FakeResp:
+                def __init__(self, d, u):
+                    self._data, self._url = d, u
+                    self.headers = _FakeHeaders()
+
+                def read(self, n=-1):
+                    return self._data if n == -1 else self._data[:n]
+
+                def geturl(self):
+                    return "https://example.com/intro-ml"
+
+                def __enter__(self):
+                    return self
+
+                def __exit__(self, *a):
+                    pass
+
+            return FakeResp(body, url)
+
+        with TemporaryDirectory() as tmp:
+            vault_dir, bookmarks_dir = _setup_vault(tmp)
+            env = {
+                "VAULT_PATH": str(vault_dir),
+                "BOOKMARKS_DIR": str(bookmarks_dir),
+            }
+            with (
+                patch.dict(os.environ, env, clear=True),
+                patch(
+                    "bookmark_tools.fetch.urllib.request.urlopen",
+                    side_effect=urlopen_with_redirect,
+                ),
+            ):
+                with self.assertRaises(BookmarkExistsError) as ctx:
+                    build_note(
+                        "https://short.link/abc",
+                        allow_new_subfolder=True,
+                    )
+                self.assertIn("redirect", str(ctx.exception).lower())

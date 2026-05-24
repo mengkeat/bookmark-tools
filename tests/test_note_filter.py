@@ -19,9 +19,7 @@ class IsArchiveSidecarTest(unittest.TestCase):
         self.assertFalse(is_archive_sidecar(Path("note.md")))
 
     def test_nested_path_detected(self) -> None:
-        self.assertTrue(
-            is_archive_sidecar(Path("Bookmarks/Dev/note.content.md"))
-        )
+        self.assertTrue(is_archive_sidecar(Path("Bookmarks/Dev/note.content.md")))
 
     def test_content_in_middle_not_detected(self) -> None:
         """Only the final suffix matters; 'content' in the stem is not a sidecar."""

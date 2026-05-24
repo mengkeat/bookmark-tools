@@ -312,6 +312,46 @@ class BookmarkHelpersTest(unittest.TestCase):
             profile = collect_existing_notes(bookmarks_dir=Path(tmp) / "Bookmarks")
         self.assertEqual(profile.url_index["https://example.com/path"], note_path)
 
+    def test_collect_existing_notes_indexes_final_urls(self) -> None:
+        """It indexes final_url fields alongside url for duplicate detection."""
+        with TemporaryDirectory() as tmp:
+            bookmarks = Path(tmp) / "Bookmarks" / "Development"
+            bookmarks.mkdir(parents=True)
+            note_path = bookmarks / "sample.md"
+            note_path.write_text(
+                "---\n"
+                "url: https://short.link/abc\n"
+                "final_url: https://example.com/full-article\n"
+                "title: Sample\n"
+                "---\n",
+                encoding="utf-8",
+            )
+            profile = collect_existing_notes(bookmarks_dir=Path(tmp) / "Bookmarks")
+        # Both URLs should resolve to the same note
+        self.assertEqual(profile.url_index.get("https://short.link/abc"), note_path)
+        self.assertEqual(
+            profile.url_index.get("https://example.com/full-article"), note_path
+        )
+
+    def test_collect_existing_notes_prefers_url_over_final_url_in_index(self) -> None:
+        """When url and final_url collide, url wins in the index."""
+        with TemporaryDirectory() as tmp:
+            bookmarks = Path(tmp) / "Bookmarks" / "Development"
+            bookmarks.mkdir(parents=True)
+            note_a = bookmarks / "note-a.md"
+            note_a.write_text(
+                "---\nurl: https://example.com/a\n---\n",
+                encoding="utf-8",
+            )
+            note_b = bookmarks / "note-b.md"
+            note_b.write_text(
+                "---\nurl: https://example.com/b\nfinal_url: https://example.com/a\n---\n",
+                encoding="utf-8",
+            )
+            profile = collect_existing_notes(bookmarks_dir=Path(tmp) / "Bookmarks")
+        # note_a was scanned first, so its url should own the index entry
+        self.assertEqual(profile.url_index.get("https://example.com/a"), note_a)
+
     def test_render_note_frontmatter_uses_unquoted_scalars(self) -> None:
         """It renders frontmatter string fields without double quotes."""
         profile = BookmarkProfile(
@@ -320,6 +360,7 @@ class BookmarkHelpersTest(unittest.TestCase):
             schema=[
                 "title",
                 "url",
+                "final_url",
                 "type",
                 "tags",
                 "created",
@@ -356,6 +397,137 @@ class BookmarkHelpersTest(unittest.TestCase):
         self.assertIn("related: [docs, tutorial]", note)
         self.assertNotIn('"', note)
 
+    def test_render_note_includes_final_url_when_different(self) -> None:
+        """It renders final_url in frontmatter when it differs from url."""
+        profile = BookmarkProfile(
+            notes=[],
+            folders=["Development"],
+            schema=[
+                "title",
+                "url",
+                "final_url",
+                "type",
+                "tags",
+                "created",
+                "last_updated",
+                "language",
+                "related",
+                "parent_topic",
+                "visibility",
+                "description",
+            ],
+            folder_examples={},
+            folder_parent_topics={},
+            default_visibility="private",
+            url_index={},
+        )
+        note = render_note(
+            metadata={
+                "folder": "Development",
+                "title": "Example title",
+                "type": "article",
+                "tags": ["python"],
+                "language": "en",
+                "related": [],
+                "parent_topic": "Development",
+                "description": "Simple description",
+                "summary": "Simple summary.",
+                "visibility": "private",
+            },
+            url="https://example.com/short",
+            profile=profile,
+            final_url="https://example.com/long-page",
+        )
+        self.assertIn("url: https://example.com/short", note)
+        self.assertIn("final_url: https://example.com/long-page", note)
+
+    def test_render_note_omits_final_url_when_same(self) -> None:
+        """It does not render final_url when it matches url."""
+        profile = BookmarkProfile(
+            notes=[],
+            folders=["Development"],
+            schema=[
+                "title",
+                "url",
+                "final_url",
+                "type",
+                "tags",
+                "created",
+                "last_updated",
+                "language",
+                "related",
+                "parent_topic",
+                "visibility",
+                "description",
+            ],
+            folder_examples={},
+            folder_parent_topics={},
+            default_visibility="private",
+            url_index={},
+        )
+        note = render_note(
+            metadata={
+                "folder": "Development",
+                "title": "Example title",
+                "type": "article",
+                "tags": ["python"],
+                "language": "en",
+                "related": [],
+                "parent_topic": "Development",
+                "description": "Simple description",
+                "summary": "Simple summary.",
+                "visibility": "private",
+            },
+            url="https://example.com/page",
+            profile=profile,
+            final_url="https://example.com/page",
+        )
+        self.assertIn("url: https://example.com/page", note)
+        self.assertNotIn("final_url", note)
+
+    def test_render_note_omits_final_url_when_none(self) -> None:
+        """It does not render final_url when not provided."""
+        profile = BookmarkProfile(
+            notes=[],
+            folders=["Development"],
+            schema=[
+                "title",
+                "url",
+                "final_url",
+                "type",
+                "tags",
+                "created",
+                "last_updated",
+                "language",
+                "related",
+                "parent_topic",
+                "visibility",
+                "description",
+            ],
+            folder_examples={},
+            folder_parent_topics={},
+            default_visibility="private",
+            url_index={},
+        )
+        note = render_note(
+            metadata={
+                "folder": "Development",
+                "title": "Example title",
+                "type": "article",
+                "tags": ["python"],
+                "language": "en",
+                "related": [],
+                "parent_topic": "Development",
+                "description": "Simple description",
+                "summary": "Simple summary.",
+                "visibility": "private",
+            },
+            url="https://example.com/page",
+            profile=profile,
+        )
+        self.assertIn("url: https://example.com/page", note)
+        self.assertNotIn("final_url", note)
+
     def test_find_existing_url_uses_profile_index(self) -> None:
         """It skips filesystem scans when profile index is available."""
         expected_path = Path("/tmp/existing.md")
@@ -374,6 +546,25 @@ class BookmarkHelpersTest(unittest.TestCase):
             found = find_existing_url("https://example.com", profile=profile)
         self.assertEqual(found, expected_path)
         mocked_bookmarks_dir.assert_not_called()
+
+    def test_find_existing_url_matches_via_final_url_in_fallback_scan(self) -> None:
+        """It finds existing notes by final_url during filesystem fallback scan."""
+        with TemporaryDirectory() as tmp:
+            bookmarks = Path(tmp) / "Bookmarks"
+            bookmarks.mkdir(parents=True)
+            note_path = bookmarks / "note.md"
+            note_path.write_text(
+                "---\n"
+                "url: https://short.link/abc\n"
+                "final_url: https://example.com/full-article\n"
+                "title: Sample\n"
+                "---\n",
+                encoding="utf-8",
+            )
+            env = {"BOOKMARKS_DIR": str(bookmarks)}
+            with patch.dict(os.environ, env, clear=True):
+                found = find_existing_url("https://example.com/full-article")
+            self.assertEqual(found, note_path)
 
 
 class ValidateFolderTest(unittest.TestCase):

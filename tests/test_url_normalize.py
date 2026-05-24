@@ -11,7 +11,9 @@ class NormalizeUrlTest(unittest.TestCase):
     # --- Basic normalization ---
 
     def test_strips_whitespace(self) -> None:
-        self.assertEqual(normalize_url("  https://example.com  "), "https://example.com")
+        self.assertEqual(
+            normalize_url("  https://example.com  "), "https://example.com"
+        )
 
     def test_empty_string_returns_empty(self) -> None:
         self.assertEqual(normalize_url(""), "")
@@ -25,7 +27,9 @@ class NormalizeUrlTest(unittest.TestCase):
         self.assertEqual(normalize_url("HTTPS://example.com"), "https://example.com")
 
     def test_lowercases_hostname(self) -> None:
-        self.assertEqual(normalize_url("https://Example.COM/path"), "https://example.com/path")
+        self.assertEqual(
+            normalize_url("https://Example.COM/path"), "https://example.com/path"
+        )
 
     def test_mixed_case_scheme_and_host(self) -> None:
         self.assertEqual(

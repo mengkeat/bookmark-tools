@@ -66,7 +66,11 @@ def check_bookmarks(
         url = str(metadata.get("url", "")).strip()
         final_url = str(metadata.get("final_url", "")).strip()
         title = str(metadata.get("title", note_path.stem))
-        urls_to_check = [u for u in [url, final_url] if u and (u.startswith("http://") or u.startswith("https://"))]
+        urls_to_check = [
+            u
+            for u in [url, final_url]
+            if u and (u.startswith("http://") or u.startswith("https://"))
+        ]
         if not urls_to_check:
             continue
         for check_target in urls_to_check:

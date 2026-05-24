@@ -144,7 +144,7 @@ class FetchNetworkErrorTest(unittest.TestCase):
                     fetch_text("https://example.com")
 
     def test_extract_page_data_uses_final_url_after_redirect(self) -> None:
-        """extract_page_data captures the redirected URL."""
+        """extract_page_data preserves original URL and captures the redirect."""
         from bookmark_tools.fetch import extract_page_data
 
         html = b"<html><head><title>Redirected Page</title></head><body></body></html>"
@@ -153,7 +153,8 @@ class FetchNetworkErrorTest(unittest.TestCase):
             "bookmark_tools.http_retry.urllib.request.urlopen", return_value=fake
         ):
             page = extract_page_data("https://example.com/original")
-        self.assertEqual(page["url"], "https://redirected.example.com/final")
+        self.assertEqual(page["url"], "https://example.com/original")
+        self.assertEqual(page["final_url"], "https://redirected.example.com/final")
         self.assertEqual(page["title"], "Redirected Page")
 
 
