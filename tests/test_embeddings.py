@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import math
+import sqlite3
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
@@ -8,9 +9,11 @@ import unittest
 
 from bookmark_tools.embeddings import (
     EMBEDDING_DIMENSIONS,
+    EMBEDDING_TABLE,
     EmbeddingMatch,
     build_embedding_text,
     refresh_embeddings,
+    rebuild_embeddings,
     semantic_search,
     _normalize_vector,
     _serialize_vector,
@@ -190,6 +193,115 @@ class EmbeddingIndexTest(unittest.TestCase):
 
             refresh_embeddings([doc], database_path=db_path, config=FAKE_CONFIG)
             self.assertEqual(mock_embed.call_count, 1)
+
+    @patch("bookmark_tools.embeddings.embed_texts", side_effect=_fake_embeddings)
+    def test_refresh_stores_embedding_model_and_dimensions(self, _mock: object) -> None:
+        """Embedding rows record the model and dimensions used to build them."""
+        with TemporaryDirectory() as tmp:
+            bookmarks_dir = Path(tmp) / "Bookmarks"
+            db_path = Path(tmp) / "test.sqlite3"
+            doc = _make_document(bookmarks_dir, "ML-AI/bert.md", title="BERT")
+
+            refresh_embeddings(
+                [doc],
+                database_path=db_path,
+                config={**FAKE_CONFIG, "embedding_model": "embed-v1"},
+            )
+
+            with sqlite3.connect(db_path) as connection:
+                row = connection.execute(
+                    f"SELECT model, dimensions FROM {EMBEDDING_TABLE}"
+                ).fetchone()
+
+        self.assertEqual(row, ("embed-v1", EMBEDDING_DIMENSIONS))
+
+    @patch("bookmark_tools.embeddings.embed_texts", side_effect=_fake_embeddings)
+    def test_refresh_reembeds_when_embedding_model_changes(
+        self, mock_embed: object
+    ) -> None:
+        """Unchanged documents are refreshed when embedding settings change."""
+        with TemporaryDirectory() as tmp:
+            bookmarks_dir = Path(tmp) / "Bookmarks"
+            db_path = Path(tmp) / "test.sqlite3"
+            doc = _make_document(bookmarks_dir, "ML-AI/bert.md", title="BERT")
+
+            refresh_embeddings(
+                [doc],
+                database_path=db_path,
+                config={**FAKE_CONFIG, "embedding_model": "embed-v1"},
+            )
+            refresh_embeddings(
+                [doc],
+                database_path=db_path,
+                config={**FAKE_CONFIG, "embedding_model": "embed-v2"},
+            )
+
+        self.assertEqual(mock_embed.call_count, 2)
+
+    @patch("bookmark_tools.embeddings.embed_texts", side_effect=_fake_embeddings)
+    def test_semantic_search_rejects_embedding_model_mismatch(
+        self, _mock: object
+    ) -> None:
+        """Direct semantic search refuses stale embedding metadata."""
+        with TemporaryDirectory() as tmp:
+            bookmarks_dir = Path(tmp) / "Bookmarks"
+            db_path = Path(tmp) / "test.sqlite3"
+            doc = _make_document(bookmarks_dir, "ML-AI/bert.md", title="BERT")
+
+            refresh_embeddings(
+                [doc],
+                database_path=db_path,
+                config={**FAKE_CONFIG, "embedding_model": "embed-v1"},
+            )
+
+            with self.assertRaisesRegex(ValueError, "different model or dimensions"):
+                semantic_search(
+                    "bert",
+                    database_path=db_path,
+                    config={**FAKE_CONFIG, "embedding_model": "embed-v2"},
+                    threshold=0.0,
+                )
+
+    @patch("bookmark_tools.embeddings.embed_texts", side_effect=_fake_embeddings)
+    def test_rebuild_embeddings_recreates_store(self, _mock: object) -> None:
+        """Full embedding rebuild drops stale rows before inserting documents."""
+        with TemporaryDirectory() as tmp:
+            bookmarks_dir = Path(tmp) / "Bookmarks"
+            db_path = Path(tmp) / "test.sqlite3"
+            doc = _make_document(bookmarks_dir, "ML-AI/bert.md", title="BERT")
+            stale_path = bookmarks_dir / "stale.md"
+
+            refresh_embeddings(
+                [doc],
+                database_path=db_path,
+                config={**FAKE_CONFIG, "embedding_model": "embed-v1"},
+            )
+            with sqlite3.connect(db_path) as connection:
+                connection.execute(
+                    f"""
+                    INSERT OR REPLACE INTO {EMBEDDING_TABLE}
+                        (path, url, title, folder, description, embedding, mtime, model, dimensions)
+                    VALUES (?, '', 'Stale', '', '', ?, 0, 'embed-v1', ?)
+                    """,
+                    (
+                        str(stale_path),
+                        _serialize_vector(_normalize_vector([1.0] * 3)),
+                        EMBEDDING_DIMENSIONS,
+                    ),
+                )
+
+            rebuild_embeddings(
+                [doc],
+                database_path=db_path,
+                config={**FAKE_CONFIG, "embedding_model": "embed-v2"},
+            )
+
+            with sqlite3.connect(db_path) as connection:
+                rows = connection.execute(
+                    f"SELECT path, model FROM {EMBEDDING_TABLE} ORDER BY path"
+                ).fetchall()
+
+        self.assertEqual(rows, [(str(doc.path), "embed-v2")])
 
     @patch("bookmark_tools.embeddings.embed_texts", side_effect=_fake_embeddings)
     def test_refresh_removes_deleted_documents(self, _mock: object) -> None:

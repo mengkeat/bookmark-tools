@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import sqlite3
 import struct
 import urllib.error
@@ -43,7 +44,7 @@ def _call_embedding_api(
 ) -> list[list[float]]:
     """Call the OpenAI-compatible embeddings endpoint and return vectors."""
     payload = {
-        "model": config.get("embedding_model", EMBEDDING_MODEL),
+        "model": embedding_model(config),
         "input": texts,
         "dimensions": EMBEDDING_DIMENSIONS,
     }
@@ -72,6 +73,16 @@ def embed_texts(
         batch = texts[start : start + EMBEDDING_BATCH_SIZE]
         all_embeddings.extend(_call_embedding_api(batch, config))
     return all_embeddings
+
+
+def embedding_model(config: dict[str, str] | None = None) -> str:
+    """Return the configured embedding model name."""
+    config = config or {}
+    return (
+        config.get("embedding_model")
+        or os.environ.get("BOOKMARK_EMBEDDING_MODEL")
+        or EMBEDDING_MODEL
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -140,21 +151,60 @@ def _create_embedding_table(connection: sqlite3.Connection) -> None:
             folder TEXT NOT NULL DEFAULT '',
             description TEXT NOT NULL DEFAULT '',
             embedding BLOB NOT NULL,
-            mtime REAL NOT NULL
+            mtime REAL NOT NULL,
+            model TEXT NOT NULL DEFAULT '',
+            dimensions INTEGER NOT NULL DEFAULT 0
         )
         """
     )
+    _ensure_embedding_metadata_columns(connection)
+
+
+def _table_columns(connection: sqlite3.Connection, table_name: str) -> set[str]:
+    """Return column names for an existing SQLite table."""
+    return {
+        row["name"] for row in connection.execute(f"PRAGMA table_info({table_name})")
+    }
+
+
+def _ensure_embedding_metadata_columns(connection: sqlite3.Connection) -> None:
+    """Add model/dimension columns to legacy embedding tables."""
+    columns = _table_columns(connection, EMBEDDING_TABLE)
+    if not columns:
+        return
+    if "model" not in columns:
+        connection.execute(
+            f"ALTER TABLE {EMBEDDING_TABLE} ADD COLUMN model TEXT NOT NULL DEFAULT ''"
+        )
+    if "dimensions" not in columns:
+        connection.execute(
+            f"ALTER TABLE {EMBEDDING_TABLE} ADD COLUMN dimensions INTEGER NOT NULL DEFAULT 0"
+        )
+
+
+def _load_stored_metadata(
+    connection: sqlite3.Connection,
+) -> dict[str, tuple[float, str, int]]:
+    """Load path → (mtime, model, dimensions) from the embedding table."""
+    try:
+        _ensure_embedding_metadata_columns(connection)
+        rows = connection.execute(
+            f"SELECT path, mtime, model, dimensions FROM {EMBEDDING_TABLE}"
+        ).fetchall()
+    except sqlite3.OperationalError:
+        return {}
+    return {
+        row["path"]: (float(row["mtime"]), str(row["model"]), int(row["dimensions"]))
+        for row in rows
+    }
 
 
 def _load_stored_mtimes(connection: sqlite3.Connection) -> dict[str, float]:
     """Load path → mtime from the embedding table."""
-    try:
-        rows = connection.execute(
-            f"SELECT path, mtime FROM {EMBEDDING_TABLE}"
-        ).fetchall()
-    except sqlite3.OperationalError:
-        return {}
-    return {row["path"]: float(row["mtime"]) for row in rows}
+    return {
+        path: metadata[0]
+        for path, metadata in _load_stored_metadata(connection).items()
+    }
 
 
 def _delete_by_paths(connection: sqlite3.Connection, paths: set[str]) -> None:
@@ -167,13 +217,16 @@ def _insert_embeddings(
     connection: sqlite3.Connection,
     documents: list[SearchDocument],
     embeddings: list[list[float]],
+    *,
+    model: str,
+    dimensions: int,
 ) -> None:
     """Insert pre-normalized embeddings into the store."""
     connection.executemany(
         f"""
         INSERT OR REPLACE INTO {EMBEDDING_TABLE}
-            (path, url, title, folder, description, embedding, mtime)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+            (path, url, title, folder, description, embedding, mtime, model, dimensions)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         [
             (
@@ -184,6 +237,8 @@ def _insert_embeddings(
                 doc.description,
                 _serialize_vector(_normalize_vector(emb)),
                 doc.path.stat().st_mtime,
+                model,
+                dimensions,
             )
             for doc, emb in zip(documents, embeddings)
         ],
@@ -213,22 +268,30 @@ def refresh_embeddings(
         raise ValueError(
             "No LLM API key configured. Semantic search requires an embedding API."
         )
+    model = embedding_model(config)
+    dimensions = EMBEDDING_DIMENSIONS
 
     connection = _connect(database_path)
     try:
         with connection:
             _create_embedding_table(connection)
 
-        stored_mtimes = _load_stored_mtimes(connection)
+        stored_metadata = _load_stored_metadata(connection)
         current_paths = {str(doc.path) for doc in documents}
 
-        removed_paths = stored_mtimes.keys() - current_paths
+        removed_paths = stored_metadata.keys() - current_paths
         changed_documents: list[SearchDocument] = []
         for document in documents:
             path_str = str(document.path)
-            if path_str not in stored_mtimes:
+            if path_str not in stored_metadata:
                 changed_documents.append(document)
-            elif document.path.stat().st_mtime != stored_mtimes[path_str]:
+                continue
+            stored_mtime, stored_model, stored_dimensions = stored_metadata[path_str]
+            if (
+                document.path.stat().st_mtime != stored_mtime
+                or stored_model != model
+                or stored_dimensions != dimensions
+            ):
                 changed_documents.append(document)
 
         if not removed_paths and not changed_documents:
@@ -241,7 +304,50 @@ def refresh_embeddings(
             if changed_documents:
                 texts = [build_embedding_text(doc) for doc in changed_documents]
                 embeddings = embed_texts(texts, config)
-                _insert_embeddings(connection, changed_documents, embeddings)
+                _insert_embeddings(
+                    connection,
+                    changed_documents,
+                    embeddings,
+                    model=model,
+                    dimensions=dimensions,
+                )
+    finally:
+        connection.close()
+
+
+def rebuild_embeddings(
+    documents: list[SearchDocument],
+    *,
+    database_path: Path | None = None,
+    config: dict[str, str] | None = None,
+) -> None:
+    """Rebuild stored embeddings for all documents from scratch."""
+    if database_path is None:
+        database_path = get_search_index_path()
+    if config is None:
+        config = get_llm_config()
+    if not config:
+        raise ValueError(
+            "No LLM API key configured. Semantic search requires an embedding API."
+        )
+
+    model = embedding_model(config)
+    dimensions = EMBEDDING_DIMENSIONS
+    connection = _connect(database_path)
+    try:
+        with connection:
+            connection.execute(f"DROP TABLE IF EXISTS {EMBEDDING_TABLE}")
+            _create_embedding_table(connection)
+            if documents:
+                texts = [build_embedding_text(doc) for doc in documents]
+                embeddings = embed_texts(texts, config)
+                _insert_embeddings(
+                    connection,
+                    documents,
+                    embeddings,
+                    model=model,
+                    dimensions=dimensions,
+                )
     finally:
         connection.close()
 
@@ -290,6 +396,8 @@ def semantic_search(
         raise ValueError(
             "No LLM API key configured. Semantic search requires an embedding API."
         )
+    model = embedding_model(config)
+    dimensions = EMBEDDING_DIMENSIONS
 
     query_embedding = _normalize_vector(embed_texts([query], config)[0])
 
@@ -297,6 +405,8 @@ def semantic_search(
 
     connection = _connect(database_path)
     try:
+        with connection:
+            _create_embedding_table(connection)
         where = ""
         params: list[str] = []
         if normalized_folder:
@@ -305,7 +415,7 @@ def semantic_search(
 
         rows = connection.execute(
             f"""
-            SELECT path, url, title, folder, description, embedding
+            SELECT path, url, title, folder, description, embedding, model, dimensions
             FROM {EMBEDDING_TABLE}
             {where}
             """,
@@ -316,6 +426,21 @@ def semantic_search(
 
     if not rows:
         return []
+
+    mismatched = [
+        row
+        for row in rows
+        if str(row["model"]) != model or int(row["dimensions"]) != dimensions
+    ]
+    if mismatched:
+        stored_models = sorted({str(row["model"]) or "<unknown>" for row in mismatched})
+        stored_dimensions = sorted({int(row["dimensions"]) for row in mismatched})
+        raise ValueError(
+            "Embedding store was built with a different model or dimensions "
+            f"(stored model(s): {', '.join(stored_models)}; "
+            f"stored dimension(s): {', '.join(str(d) for d in stored_dimensions)}; "
+            f"expected: {model}/{dimensions}). Run bookmark-rebuild."
+        )
 
     stored_vectors = [_deserialize_vector(row["embedding"]) for row in rows]
     similarities = _cosine_similarities(query_embedding, stored_vectors)
