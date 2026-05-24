@@ -53,10 +53,11 @@ def render_note(
     profile: BookmarkProfile,
     *,
     created_override: str | None = None,
+    final_url: str | None = None,
 ) -> str:
     """Render bookmark metadata into note content with ordered frontmatter."""
     today = dt.date.today().isoformat()
-    values = {
+    values: dict[str, object] = {
         "title": str(metadata["title"]).strip(),
         "url": url,
         "type": str(metadata["type"]).strip(),
@@ -78,6 +79,8 @@ def render_note(
             metadata.get("visibility", profile.default_visibility or "private")
         ),
     }
+    if final_url and final_url != url:
+        values["final_url"] = final_url
     frontmatter_lines = ["---"]
     for key in profile.schema:
         if key == "summary" or key not in values:

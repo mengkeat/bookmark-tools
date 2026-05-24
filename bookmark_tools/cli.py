@@ -273,7 +273,7 @@ def build_note(
         target_path = uniquify_path(
             (bookmarks_dir / folder) / slugify_filename(str(metadata["title"]))
         )
-    return target_path, render_note(metadata, page_data["url"], profile), folder_message
+    return target_path, render_note(metadata, page_data["url"], profile, final_url=page_data["final_url"]), folder_message
 
 
 def parse_args() -> argparse.Namespace:

@@ -42,6 +42,7 @@ STOPWORDS = {
 DEFAULT_FIELD_ORDER = [
     "title",
     "url",
+    "final_url",
     "type",
     "tags",
     "created",
