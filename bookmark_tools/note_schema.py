@@ -562,3 +562,128 @@ def build_schema_v1_values(
         if key not in OWNED_FIELDS and key not in values:
             values[key] = val
     return values
+
+
+# ---------------------------------------------------------------------------
+# Schema validation
+# ---------------------------------------------------------------------------
+
+_REQUIRED_FIELDS = ("schema_version", "id", "url", "title", "created", "last_updated")
+
+_ISO_DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+_ISO_TIMESTAMP_RE = re.compile(
+    r"^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}(:\d{2})?(Z|[+-]\d{2}:\d{2})?)?$"
+)
+_SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
+_HTTP_STATUS_RE = re.compile(r"^\d{3}$")
+
+
+@dataclass(frozen=True)
+class SchemaIssue:
+    """A single schema validation finding."""
+
+    field: str
+    severity: str  # "error" or "warning"
+    message: str
+
+
+def validate_schema_v1(metadata: Mapping[str, object]) -> list[SchemaIssue]:
+    """Validate frontmatter metadata against schema v1 expectations.
+
+    Returns a list of issues ordered by field. An empty list means the
+    metadata passes all checks.
+    """
+    issues: list[SchemaIssue] = []
+
+    # Required fields
+    for field in _REQUIRED_FIELDS:
+        value = metadata.get(field)
+        if value is None or str(value).strip() == "":
+            issues.append(
+                SchemaIssue(field, "error", f"Missing required field: {field}")
+            )
+
+    # schema_version must be 1
+    sv = metadata.get("schema_version")
+    if sv is not None and str(sv).strip() not in ("1", ""):
+        issues.append(
+            SchemaIssue(
+                "schema_version",
+                "error",
+                f"Unsupported schema_version: {sv!r} (expected 1)",
+            )
+        )
+
+    # Stable ID should be a 64-char hex string
+    id_val = str(metadata.get("id", "")).strip()
+    if id_val and not _SHA256_RE.fullmatch(id_val):
+        issues.append(
+            SchemaIssue("id", "warning", "ID is not a valid SHA-256 hex digest")
+        )
+
+    # URL fields should be parseable
+    for url_field in ("url", "final_url", "canonical_url"):
+        url_val = str(metadata.get(url_field, "")).strip()
+        if url_val:
+            parsed = urllib.parse.urlsplit(url_val)
+            if not parsed.scheme or not parsed.netloc:
+                issues.append(
+                    SchemaIssue(url_field, "warning", f"Not a valid URL: {url_val!r}")
+                )
+
+    # Domain should match canonical_url hostname
+    domain = str(metadata.get("domain", "")).strip()
+    canonical = str(metadata.get("canonical_url", "")).strip()
+    if domain and canonical:
+        expected_domain = domain_from_url(canonical)
+        if domain.lower() != expected_domain:
+            issues.append(
+                SchemaIssue(
+                    "domain",
+                    "warning",
+                    f"Domain {domain!r} does not match canonical_url host {expected_domain!r}",
+                )
+            )
+
+    # Date/timestamp formats
+    for date_field in ("created", "last_updated", "added_at"):
+        val = str(metadata.get(date_field, "")).strip()
+        if (
+            val
+            and not _ISO_DATE_RE.fullmatch(val)
+            and not _ISO_TIMESTAMP_RE.fullmatch(val)
+        ):
+            issues.append(
+                SchemaIssue(
+                    date_field, "warning", f"Not a valid date/timestamp: {val!r}"
+                )
+            )
+
+    for ts_field in ("last_fetched_at", "last_success_at"):
+        val = str(metadata.get(ts_field, "")).strip()
+        if val and not _ISO_TIMESTAMP_RE.fullmatch(val):
+            issues.append(
+                SchemaIssue(ts_field, "warning", f"Not a valid ISO timestamp: {val!r}")
+            )
+
+    # http_status should be a 3-digit code when present
+    http_status = str(metadata.get("http_status", "")).strip()
+    if http_status and not _HTTP_STATUS_RE.fullmatch(http_status):
+        issues.append(
+            SchemaIssue(
+                "http_status", "warning", f"Not a valid HTTP status: {http_status!r}"
+            )
+        )
+
+    # content_hash should be a SHA-256 hex when present
+    ch = str(metadata.get("content_hash", "")).strip()
+    if ch and not _SHA256_RE.fullmatch(ch):
+        issues.append(
+            SchemaIssue(
+                "content_hash",
+                "warning",
+                f"Not a valid SHA-256 hex digest: {ch!r}",
+            )
+        )
+
+    return issues

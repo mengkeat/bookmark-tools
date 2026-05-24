@@ -429,5 +429,92 @@ class TimestampSemanticsTest(unittest.TestCase):
         self.assertEqual(values["last_success_at"], "2026-05-24T11:00:00Z")
 
 
+class SchemaValidationTest(unittest.TestCase):
+    """Tests for validate_schema_v1."""
+
+    def test_valid_metadata_has_no_issues(self) -> None:
+        values = build_schema_v1_values(
+            title="Example",
+            url="https://example.com",
+            bookmark_type="article",
+            tags=["python"],
+            created="2026-05-24",
+            last_updated="2026-05-24",
+            language="en",
+            related=[],
+            parent_topic="Dev",
+            visibility="private",
+            description="Desc",
+            content="Full content",
+            last_fetched_at="2026-05-24T12:00:00Z",
+        )
+        from bookmark_tools.note_schema import validate_schema_v1
+
+        issues = validate_schema_v1(values)
+        self.assertEqual(issues, [])
+
+    def test_missing_required_fields_reported(self) -> None:
+        from bookmark_tools.note_schema import validate_schema_v1
+
+        issues = validate_schema_v1({})
+        fields = [i.field for i in issues]
+        self.assertIn("schema_version", fields)
+        self.assertIn("id", fields)
+        self.assertIn("url", fields)
+        self.assertIn("title", fields)
+
+    def test_invalid_id_reported(self) -> None:
+        from bookmark_tools.note_schema import validate_schema_v1
+
+        issues = validate_schema_v1(
+            {
+                "schema_version": 1,
+                "id": "not-a-sha",
+                "url": "https://example.com",
+                "title": "Test",
+                "created": "2026-01-01",
+                "last_updated": "2026-01-01",
+            }
+        )
+        id_issues = [i for i in issues if i.field == "id"]
+        self.assertEqual(len(id_issues), 1)
+        self.assertEqual(id_issues[0].severity, "warning")
+
+    def test_domain_mismatch_reported(self) -> None:
+        from bookmark_tools.note_schema import validate_schema_v1
+
+        issues = validate_schema_v1(
+            {
+                "schema_version": 1,
+                "id": "a" * 64,
+                "url": "https://example.com",
+                "title": "Test",
+                "created": "2026-01-01",
+                "last_updated": "2026-01-01",
+                "domain": "other.com",
+                "canonical_url": "https://example.com/page",
+            }
+        )
+        domain_issues = [i for i in issues if i.field == "domain"]
+        self.assertEqual(len(domain_issues), 1)
+
+    def test_invalid_http_status_reported(self) -> None:
+        from bookmark_tools.note_schema import validate_schema_v1
+
+        issues = validate_schema_v1(
+            {
+                "schema_version": 1,
+                "id": "a" * 64,
+                "url": "https://example.com",
+                "title": "Test",
+                "created": "2026-01-01",
+                "last_updated": "2026-01-01",
+                "http_status": "not-a-code",
+            }
+        )
+        status_issues = [i for i in issues if i.field == "http_status"]
+        self.assertEqual(len(status_issues), 1)
+
+
 if __name__ == "__main__":
     unittest.main()
