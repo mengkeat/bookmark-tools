@@ -20,25 +20,44 @@ A healthy vault should be recoverable from the Markdown notes under `BOOKMARKS_D
 
 ## Current canonical bookmark shape
 
-A bookmark note is a Markdown file in `BOOKMARKS_DIR` with YAML-like frontmatter containing at least a `url` field. The current default frontmatter fields are:
+A bookmark note is a Markdown file in `BOOKMARKS_DIR` with YAML-like frontmatter containing at least a `url` field. New notes are rendered as schema v1 records:
 
 ```yaml
 ---
+schema_version: 1
+id: <sha256(normalized original url)>
 title: Example
 url: https://example.com
+final_url: https://example.com
+canonical_url: https://example.com
+domain: example.com
 type: article
 tags: [example]
-created: 2026-05-23
-last_updated: 2026-05-23
+added_at: 2026-05-24
+last_fetched_at: 2026-05-24T00:00:00Z
+last_success_at: 2026-05-24T00:00:00Z
+created: 2026-05-24
+last_updated: 2026-05-24
 language: en
 related: [example]
 parent_topic: Bookmarks
 visibility: private
+status: ok
+http_status:
+content_type:
+content_hash: <sha256(fetched text)>
+archive_path:
+classification_model: heuristic
+classification_prompt_version: v1
+summary_model: summary-pipeline-v1
+source_kind: url
+source_path:
+source_line:
 description: Example description
 ---
 ```
 
-The body currently contains a `Summary:` section. Future schema versions may add stable IDs, fetch metadata, content hashes, generated relationship blocks, and fetch timelines, but existing notes must remain readable.
+The body starts with a generated `Summary:` block using explicit `bookmark-tools` markers. Human-authored sections such as `## Notes` live outside generated blocks and are preserved by update/migration flows. Existing legacy notes without `schema_version` remain readable through tolerant parsing.
 
 ## Archive sidecars
 
