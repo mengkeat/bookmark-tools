@@ -10,6 +10,8 @@ class PageData(TypedDict):
     description: str
     language: str
     content: str
+    http_status: int
+    content_type: str
 
 
 class BookmarkMetadata(TypedDict, total=False):

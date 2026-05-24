@@ -13,8 +13,8 @@ from .types import PageData
 CONTENT_PREVIEW_LIMIT = 8_000
 
 
-def fetch_text(url: str) -> tuple[str, str]:
-    """Fetch URL content and return the final URL with decoded text."""
+def fetch_response_data(url: str) -> tuple[str, str, int, str]:
+    """Fetch URL content and return decoded text plus response metadata."""
     request = urllib.request.Request(
         url,
         headers={
@@ -25,8 +25,17 @@ def fetch_text(url: str) -> tuple[str, str]:
     with urlopen_with_retry(request, timeout=DEFAULT_TIMEOUT) as response:
         final_url = response.geturl()
         charset = response.headers.get_content_charset() or "utf-8"
+        content_type_getter = getattr(response.headers, "get_content_type", None)
+        content_type = content_type_getter() if callable(content_type_getter) else ""
+        status = int(getattr(response, "status", 200) or 0)
         raw = response.read(MAX_FETCH_BYTES)
-    return final_url, raw.decode(charset, errors="replace")
+    return final_url, raw.decode(charset, errors="replace"), status, content_type
+
+
+def fetch_text(url: str) -> tuple[str, str]:
+    """Fetch URL content and return the final URL with decoded text."""
+    final_url, raw_text, _, _ = fetch_response_data(url)
+    return final_url, raw_text
 
 
 class _MetadataParser(HTMLParser):
@@ -95,7 +104,7 @@ def clean_html(text: str) -> str:
 
 def extract_page_data(url: str) -> PageData:
     """Fetch and extract normalized page fields used for bookmark classification."""
-    final_url, raw_text = fetch_text(url)
+    final_url, raw_text, http_status, content_type = fetch_response_data(url)
     parser = _parse_metadata(raw_text)
     title = parser.meta.get("og:title", "") or parser.title
     description = parser.meta.get("description", "") or parser.meta.get(
@@ -109,4 +118,6 @@ def extract_page_data(url: str) -> PageData:
         "description": description,
         "language": language,
         "content": clean_html(raw_text)[:CONTENT_PREVIEW_LIMIT],
+        "http_status": http_status,
+        "content_type": content_type,
     }

@@ -98,9 +98,13 @@ class FetchNetworkErrorTest(unittest.TestCase):
             def get_content_charset(self):
                 return "utf-8"
 
+            def get_content_type(self):
+                return "text/html"
+
         class FakeResponse:
             def __init__(self):
                 self.headers = FakeHeaders()
+                self.status = 200
                 self._body = body
                 self._url = url
 
@@ -156,6 +160,8 @@ class FetchNetworkErrorTest(unittest.TestCase):
         self.assertEqual(page["url"], "https://example.com/original")
         self.assertEqual(page["final_url"], "https://redirected.example.com/final")
         self.assertEqual(page["title"], "Redirected Page")
+        self.assertEqual(page["http_status"], 200)
+        self.assertEqual(page["content_type"], "text/html")
 
 
 if __name__ == "__main__":

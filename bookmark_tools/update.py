@@ -112,6 +112,8 @@ def update_bookmark(
         created_override=old_created or None,
         final_url=page_data["final_url"],
         content=page_data["content"],
+        http_status=page_data.get("http_status", ""),
+        content_type=page_data.get("content_type", ""),
         classification_model=_classification_model_label(llm_metadata is not None),
         summary_model=SUMMARY_MODEL_LABEL,
         existing_note_text=existing_note_text,
