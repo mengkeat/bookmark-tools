@@ -81,7 +81,7 @@ def summarize_with_llm(page_data: PageData) -> str | None:
 
     content = page_data["content"][:SUMMARY_CONTENT_LIMIT]
     payload = {
-        "model": config["model"],
+        "model": config.get("summary_model") or config["model"],
         "temperature": 0.2,
         "messages": [
             {
@@ -112,7 +112,8 @@ def summarize_with_llm(page_data: PageData) -> str | None:
         method="POST",
     )
     try:
-        with urlopen_with_retry(request, timeout=SUMMARIZE_TIMEOUT_SECONDS) as response:
+        timeout = int(config.get("summary_timeout") or SUMMARIZE_TIMEOUT_SECONDS)
+        with urlopen_with_retry(request, timeout=timeout) as response:
             body = json.loads(response.read().decode("utf-8"))
         message = body["choices"][0]["message"]
         text = _trim_summary(

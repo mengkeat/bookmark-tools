@@ -2,12 +2,12 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 import re
 import urllib.error
 import urllib.request
 from collections import Counter
 
+from .config import get_llm_config as resolve_llm_config
 from .http_retry import urlopen_with_retry
 from dataclasses import dataclass
 from pathlib import Path
@@ -177,37 +177,8 @@ def derive_parent_topic(
 
 
 def get_llm_config() -> dict[str, str] | None:
-    """Read LLM configuration from environment variables."""
-    provider = os.environ.get("LLM_PROVIDER", "").strip().lower()
-    api_key = (
-        os.environ.get("BOOKMARK_LLM_API_KEY")
-        or os.environ.get("OPENAI_API_KEY")
-        or os.environ.get("OPENROUTER_API_KEY")
-    )
-    if not api_key:
-        return None
-    base_url = os.environ.get("BOOKMARK_LLM_BASE_URL") or os.environ.get(
-        "OPENAI_BASE_URL"
-    )
-    if not base_url:
-        base_url = (
-            "https://openrouter.ai/api/v1"
-            if provider == "openrouter"
-            else "https://api.openai.com/v1"
-        )
-    model = (
-        os.environ.get("BOOKMARK_LLM_MODEL")
-        or os.environ.get("OPENAI_MODEL")
-        or os.environ.get("MODEL_ID")
-        or "gpt-4.1-mini"
-    )
-    if model.startswith("openrouter/"):
-        model = model[len("openrouter/") :]
-    return {
-        "api_key": api_key,
-        "model": model,
-        "base_url": base_url.rstrip("/"),
-    }
+    """Read centralized LLM/provider configuration."""
+    return resolve_llm_config()
 
 
 def call_llm(
@@ -278,7 +249,8 @@ def call_llm(
         method="POST",
     )
     try:
-        with urlopen_with_retry(request, timeout=DEFAULT_TIMEOUT) as response:
+        timeout = int(config.get("request_timeout") or DEFAULT_TIMEOUT)
+        with urlopen_with_retry(request, timeout=timeout) as response:
             body = json.loads(response.read().decode("utf-8"))
         message = body["choices"][0]["message"]
         content = message.get("content") or message.get("reasoning") or ""

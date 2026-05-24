@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 import json
-import os
 import sqlite3
 import struct
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
 
+from .config import DEFAULT_EMBEDDING_DIMENSIONS, DEFAULT_EMBEDDING_MODEL
 from .http_retry import urlopen_with_retry
 from pathlib import Path
 
@@ -16,8 +16,8 @@ from .paths import DEFAULT_TIMEOUT, get_search_index_path
 from .search_documents import SearchDocument
 
 EMBEDDING_TABLE = "embedding_store"
-EMBEDDING_MODEL = "text-embedding-3-small"
-EMBEDDING_DIMENSIONS = 256
+EMBEDDING_MODEL = DEFAULT_EMBEDDING_MODEL
+EMBEDDING_DIMENSIONS = DEFAULT_EMBEDDING_DIMENSIONS
 EMBEDDING_BATCH_SIZE = 512
 EMBEDDING_BODY_CHARACTER_LIMIT = 500
 MIN_SIMILARITY_THRESHOLD = 0.40
@@ -46,7 +46,7 @@ def _call_embedding_api(
     payload = {
         "model": embedding_model(config),
         "input": texts,
-        "dimensions": EMBEDDING_DIMENSIONS,
+        "dimensions": embedding_dimensions(config),
     }
     request = urllib.request.Request(
         f"{config['base_url']}/embeddings",
@@ -57,7 +57,8 @@ def _call_embedding_api(
         },
         method="POST",
     )
-    with urlopen_with_retry(request, timeout=DEFAULT_TIMEOUT) as response:
+    timeout = int(config.get("request_timeout") or DEFAULT_TIMEOUT)
+    with urlopen_with_retry(request, timeout=timeout) as response:
         body = json.loads(response.read().decode("utf-8"))
     body["data"].sort(key=lambda item: item["index"])
     return [item["embedding"] for item in body["data"]]
@@ -78,11 +79,14 @@ def embed_texts(
 def embedding_model(config: dict[str, str] | None = None) -> str:
     """Return the configured embedding model name."""
     config = config or {}
-    return (
-        config.get("embedding_model")
-        or os.environ.get("BOOKMARK_EMBEDDING_MODEL")
-        or EMBEDDING_MODEL
-    )
+    return config.get("embedding_model") or EMBEDDING_MODEL
+
+
+def embedding_dimensions(config: dict[str, str] | None = None) -> int:
+    """Return the configured embedding dimensions."""
+    config = config or {}
+    value = config.get("embedding_dimensions") or EMBEDDING_DIMENSIONS
+    return int(value)
 
 
 # ---------------------------------------------------------------------------
@@ -269,7 +273,7 @@ def refresh_embeddings(
             "No LLM API key configured. Semantic search requires an embedding API."
         )
     model = embedding_model(config)
-    dimensions = EMBEDDING_DIMENSIONS
+    dimensions = embedding_dimensions(config)
 
     connection = _connect(database_path)
     try:
@@ -332,7 +336,7 @@ def rebuild_embeddings(
         )
 
     model = embedding_model(config)
-    dimensions = EMBEDDING_DIMENSIONS
+    dimensions = embedding_dimensions(config)
     connection = _connect(database_path)
     try:
         with connection:
@@ -397,7 +401,7 @@ def semantic_search(
             "No LLM API key configured. Semantic search requires an embedding API."
         )
     model = embedding_model(config)
-    dimensions = EMBEDDING_DIMENSIONS
+    dimensions = embedding_dimensions(config)
 
     query_embedding = _normalize_vector(embed_texts([query], config)[0])
 

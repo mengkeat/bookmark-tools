@@ -216,6 +216,29 @@ class EmbeddingIndexTest(unittest.TestCase):
         self.assertEqual(row, ("embed-v1", EMBEDDING_DIMENSIONS))
 
     @patch("bookmark_tools.embeddings.embed_texts", side_effect=_fake_embeddings)
+    def test_refresh_stores_configured_embedding_dimensions(
+        self, _mock: object
+    ) -> None:
+        """Configured embedding dimensions are stored with embedding rows."""
+        with TemporaryDirectory() as tmp:
+            bookmarks_dir = Path(tmp) / "Bookmarks"
+            db_path = Path(tmp) / "test.sqlite3"
+            doc = _make_document(bookmarks_dir, "ML-AI/bert.md", title="BERT")
+
+            refresh_embeddings(
+                [doc],
+                database_path=db_path,
+                config={**FAKE_CONFIG, "embedding_dimensions": "512"},
+            )
+
+            with sqlite3.connect(db_path) as connection:
+                row = connection.execute(
+                    f"SELECT dimensions FROM {EMBEDDING_TABLE}"
+                ).fetchone()
+
+        self.assertEqual(row, (512,))
+
+    @patch("bookmark_tools.embeddings.embed_texts", side_effect=_fake_embeddings)
     def test_refresh_reembeds_when_embedding_model_changes(
         self, mock_embed: object
     ) -> None:
@@ -234,6 +257,29 @@ class EmbeddingIndexTest(unittest.TestCase):
                 [doc],
                 database_path=db_path,
                 config={**FAKE_CONFIG, "embedding_model": "embed-v2"},
+            )
+
+        self.assertEqual(mock_embed.call_count, 2)
+
+    @patch("bookmark_tools.embeddings.embed_texts", side_effect=_fake_embeddings)
+    def test_refresh_reembeds_when_embedding_dimensions_change(
+        self, mock_embed: object
+    ) -> None:
+        """Unchanged documents are refreshed when dimensions change."""
+        with TemporaryDirectory() as tmp:
+            bookmarks_dir = Path(tmp) / "Bookmarks"
+            db_path = Path(tmp) / "test.sqlite3"
+            doc = _make_document(bookmarks_dir, "ML-AI/bert.md", title="BERT")
+
+            refresh_embeddings(
+                [doc],
+                database_path=db_path,
+                config={**FAKE_CONFIG, "embedding_dimensions": "256"},
+            )
+            refresh_embeddings(
+                [doc],
+                database_path=db_path,
+                config={**FAKE_CONFIG, "embedding_dimensions": "512"},
             )
 
         self.assertEqual(mock_embed.call_count, 2)
@@ -259,6 +305,32 @@ class EmbeddingIndexTest(unittest.TestCase):
                     "bert",
                     database_path=db_path,
                     config={**FAKE_CONFIG, "embedding_model": "embed-v2"},
+                    threshold=0.0,
+                )
+
+    @patch("bookmark_tools.embeddings.embed_texts", side_effect=_fake_embeddings)
+    def test_semantic_search_rejects_embedding_dimension_mismatch(
+        self, _mock: object
+    ) -> None:
+        """Direct semantic search refuses stale embedding dimensions."""
+        with TemporaryDirectory() as tmp:
+            bookmarks_dir = Path(tmp) / "Bookmarks"
+            db_path = Path(tmp) / "test.sqlite3"
+            doc = _make_document(bookmarks_dir, "ML-AI/bert.md", title="BERT")
+
+            refresh_embeddings(
+                [doc],
+                database_path=db_path,
+                config={**FAKE_CONFIG, "embedding_dimensions": "256"},
+            )
+
+            with self.assertRaisesRegex(
+                ValueError, "expected: text-embedding-3-small/512"
+            ):
+                semantic_search(
+                    "bert",
+                    database_path=db_path,
+                    config={**FAKE_CONFIG, "embedding_dimensions": "512"},
                     threshold=0.0,
                 )
 

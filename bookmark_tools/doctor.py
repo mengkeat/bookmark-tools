@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any, Sequence
 
 from .classify import get_llm_config
-from .embeddings import EMBEDDING_DIMENSIONS, EMBEDDING_TABLE, embedding_model
+from .embeddings import EMBEDDING_TABLE, embedding_dimensions, embedding_model
 from .note_filter import is_archive_sidecar, iter_bookmark_note_paths
 from .note_schema import parse_note_file, validate_schema_v1
 from .paths import (
@@ -448,8 +448,9 @@ def _check_embedding_store(report: DoctorReport) -> bool:
                 )
                 return True
 
-            expected_model = embedding_model(get_llm_config())
-            expected_dimensions = EMBEDDING_DIMENSIONS
+            config = get_llm_config()
+            expected_model = embedding_model(config)
+            expected_dimensions = embedding_dimensions(config)
             rows = connection.execute(
                 f"SELECT path, model, dimensions FROM {EMBEDDING_TABLE}"
             ).fetchall()
