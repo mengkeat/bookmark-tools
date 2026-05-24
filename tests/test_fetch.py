@@ -163,6 +163,70 @@ class FetchNetworkErrorTest(unittest.TestCase):
         self.assertEqual(page["http_status"], 200)
         self.assertEqual(page["content_type"], "text/html")
 
+    def test_extract_page_data_extracts_canonical_url(self) -> None:
+        """extract_page_data extracts canonical URL from <link rel='canonical'>."""
+        from bookmark_tools.fetch import extract_page_data
+
+        html = (
+            b"<html><head>"
+            b'<link rel="canonical" href="https://example.com/canonical-page">'
+            b"<title>Page</title></head><body>Content</body></html>"
+        )
+        fake = self._fake_response(html, url="https://example.com/page?p=1")
+        with patch(
+            "bookmark_tools.http_retry.urllib.request.urlopen", return_value=fake
+        ):
+            page = extract_page_data("https://example.com/page?p=1")
+        self.assertEqual(page["canonical_url"], "https://example.com/canonical-page")
+
+    def test_extract_page_data_uses_og_url_as_canonical_fallback(self) -> None:
+        """extract_page_data falls back to og:url when no <link rel='canonical'>."""
+        from bookmark_tools.fetch import extract_page_data
+
+        html = (
+            b"<html><head>"
+            b'<meta property="og:url" content="https://example.com/og-page">'
+            b"<title>Page</title></head><body></body></html>"
+        )
+        fake = self._fake_response(html, url="https://example.com/page?p=2")
+        with patch(
+            "bookmark_tools.http_retry.urllib.request.urlopen", return_value=fake
+        ):
+            page = extract_page_data("https://example.com/page?p=2")
+        self.assertEqual(page["canonical_url"], "https://example.com/og-page")
+
+    def test_extract_page_data_defaults_canonical_to_final_url(self) -> None:
+        """canonical_url defaults to final_url when no canonical hints exist."""
+        from bookmark_tools.fetch import extract_page_data
+
+        html = b"<html><head><title>Page</title></head><body></body></html>"
+        fake = self._fake_response(html, url="https://example.com/page")
+        with patch(
+            "bookmark_tools.http_retry.urllib.request.urlopen", return_value=fake
+        ):
+            page = extract_page_data("https://example.com/page")
+        self.assertEqual(page["canonical_url"], "https://example.com/page")
+
+    def test_extract_page_data_provides_full_content(self) -> None:
+        """full_content contains the complete cleaned text, not truncated."""
+        from bookmark_tools.fetch import extract_page_data
+
+        body = "x" * 20_000  # Much larger than CONTENT_PREVIEW_LIMIT
+        html = (
+            f"<html><head><title>Long</title></head>"
+            f"<body><p>{body}</p></body></html>".encode()
+        )
+        fake = self._fake_response(html, url="https://example.com/long")
+        with patch(
+            "bookmark_tools.http_retry.urllib.request.urlopen", return_value=fake
+        ):
+            page = extract_page_data("https://example.com/long")
+        # content is truncated
+        self.assertLessEqual(len(page["content"]), 8_000)
+        # full_content is the complete cleaned text
+        self.assertGreater(len(page["full_content"]), 10_000)
+        self.assertIn("xxxx", page["full_content"])
+
 
 if __name__ == "__main__":
     unittest.main()

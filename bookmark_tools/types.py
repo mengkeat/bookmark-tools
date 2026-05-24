@@ -6,10 +6,12 @@ from typing import TypedDict
 class PageData(TypedDict):
     url: str  # Original URL as provided by the user
     final_url: str  # URL after following HTTP redirects
+    canonical_url: str  # Canonical URL from <link rel="canonical"> or og:url
     title: str
     description: str
     language: str
-    content: str
+    content: str  # Truncated preview (8 KB) for classification
+    full_content: str  # Full cleaned text for hashing
     http_status: int
     content_type: str
 

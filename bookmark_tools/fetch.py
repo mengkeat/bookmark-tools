@@ -39,13 +39,14 @@ def fetch_text(url: str) -> tuple[str, str]:
 
 
 class _MetadataParser(HTMLParser):
-    """Extract title, meta tags, and lang attribute from HTML."""
+    """Extract title, meta tags, lang attribute, and canonical URL from HTML."""
 
     def __init__(self) -> None:
         super().__init__()
         self.title = ""
         self.meta: dict[str, str] = {}
         self.language = ""
+        self.canonical_url = ""
         self._in_title = False
         self._title_parts: list[str] = []
 
@@ -63,6 +64,10 @@ class _MetadataParser(HTMLParser):
             name = attr_dict.get("property", "") or attr_dict.get("name", "")
             if name and content:
                 self.meta.setdefault(name.lower(), content)
+        elif tag == "link" and attr_dict.get("rel", "").lower() == "canonical":
+            href = attr_dict.get("href", "").strip()
+            if href:
+                self.canonical_url = href
 
     def handle_data(self, data: str) -> None:
         if self._in_title:
@@ -111,13 +116,22 @@ def extract_page_data(url: str) -> PageData:
         "og:description", ""
     )
     language = parser.language or "en"
+    # Canonical URL: prefer <link rel="canonical">, then og:url, then final_url
+    canonical_url = (
+        parser.canonical_url
+        or parser.meta.get("og:url", "").strip()
+        or final_url
+    )
+    full_content = clean_html(raw_text)
     return {
         "url": url,
         "final_url": final_url,
+        "canonical_url": canonical_url,
         "title": title or urllib.parse.urlparse(final_url).netloc,
         "description": description,
         "language": language,
-        "content": clean_html(raw_text)[:CONTENT_PREVIEW_LIMIT],
+        "content": full_content[:CONTENT_PREVIEW_LIMIT],
+        "full_content": full_content,
         "http_status": http_status,
         "content_type": content_type,
     }

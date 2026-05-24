@@ -63,6 +63,7 @@ def render_note(
     final_url: str | None = None,
     canonical_url: str | None = None,
     content: str = "",
+    full_content: str = "",
     http_status: object = "",
     content_type: str = "",
     archive_path: str = "",
@@ -104,7 +105,7 @@ def render_note(
             metadata.get("visibility", profile.default_visibility or "private")
         ),
         description=str(metadata.get("description", metadata["title"])).strip(),
-        content=content,
+        content=full_content or content,
         http_status=http_status,
         content_type=content_type,
         archive_path=archive_path,
