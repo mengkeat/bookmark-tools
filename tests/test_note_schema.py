@@ -96,6 +96,7 @@ class NoteSchemaRenderTest(unittest.TestCase):
             yaml_scalar("https://example.com/path"), "https://example.com/path"
         )
         self.assertEqual(yaml_scalar("Example: with colon"), "'Example: with colon'")
+        self.assertEqual(yaml_scalar("tag,with-comma"), "'tag,with-comma'")
         self.assertEqual(yaml_scalar("true"), "'true'")
 
     def test_render_frontmatter_uses_schema_order(self) -> None:

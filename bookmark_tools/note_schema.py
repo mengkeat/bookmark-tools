@@ -241,6 +241,7 @@ def yaml_scalar(value: object) -> str:
         or text.startswith(UNSAFE_PLAIN_START)
         or ": " in text
         or " #" in text
+        or "," in text
         or "[" in text
         or "]" in text
         or "{" in text
