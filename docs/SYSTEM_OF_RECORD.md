@@ -93,9 +93,29 @@ Sidecars are cache/raw data. They can support search or future recrawl/change wo
 
 ## Derived search state
 
-The SQLite search database (`BOOKMARK_SEARCH_INDEX`, defaulting under `$VAULT_PATH/Meta/`) is derived state. It contains FTS rows and embeddings generated from bookmark notes. It is safe to delete and rebuild.
+The SQLite search database (`BOOKMARK_SEARCH_INDEX`, defaulting under `$VAULT_PATH/Meta/`) is derived state. It contains FTS rows and embeddings generated from bookmark notes. It is safe to delete and rebuild with `bookmark-rebuild`.
 
-Commands that update, delete, or reorganize bookmarks should update the derived index when practical, but Markdown remains authoritative if the two diverge.
+Commands that update, delete, or reorganize bookmarks should update the derived index when practical, but Markdown remains authoritative if the two diverge. `bookmark-doctor` reports missing, corrupt, stale, or incomplete search state and `bookmark-doctor --fix` can safely rebuild the search index from Markdown.
+
+Embedding rows record the embedding model and vector dimensions used to create them. Semantic search refuses mismatched embedding stores, and `bookmark-doctor` reports model/dimension drift so the store can be rebuilt.
+
+## Doctor and rebuild contract
+
+`bookmark-doctor` is the health surface for the Markdown system of record and its derived state. It reports:
+
+- missing/invalid bookmark path configuration,
+- missing provider/API configuration,
+- schema v1 frontmatter issues via `validate_schema_v1()`,
+- non-bookmark Markdown under `Bookmarks/`,
+- duplicate original/final/canonical URL identities,
+- missing archive paths and orphan `*.content.md` sidecars,
+- missing/corrupt/stale search indexes and notes missing from FTS,
+- embedding model/dimension mismatch,
+- broken Obsidian `[[internal links]]`.
+
+`bookmark-doctor --json` emits a stable report object with `status`, `score`, `summary`, path fields, and issue records. `bookmark-doctor --fix` only performs safe derived-state repairs (currently search rebuilds and embedding rebuilds when API configuration is available). It must not delete notes or alter human-authored Markdown.
+
+`bookmark-rebuild` reconstructs current derived state from Markdown: FTS search is always rebuilt; embeddings are rebuilt only when API configuration is available or skipped with an explicit reason.
 
 ## Path validation
 

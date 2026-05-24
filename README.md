@@ -12,6 +12,8 @@ CLI tools for fetching, classifying, summarizing, and searching bookmarks in an 
 - **Bookmark update**: Re-fetch and re-classify existing bookmarks with `bookmark-update`, preserving creation date, original URL, human notes, and unknown frontmatter. Supports `--all` and `--folder` for bulk updates.
 - **Bookmark deletion**: Delete bookmarks by URL or file path with `bookmark-delete`, cleaning up search index and embeddings.
 - **Search**: BM25 keyword search, semantic vector search, or hybrid search with context snippets. Filter by `--tag`, export as JSON/CSV.
+- **Derived-state rebuilds**: Rebuild FTS search and embedding state from Markdown with `bookmark-rebuild`.
+- **Vault doctor**: Diagnose config, schema, duplicate URLs, archive references, search index state, embedding metadata, non-bookmark Markdown, and broken Obsidian links with `bookmark-doctor`.
 - **Link health checking**: Validate all bookmarked URLs with `bookmark-check` to find dead links.
 - **Vault statistics**: View bookmark counts, tag distribution, and folder stats with `bookmark-stats`.
 - **Folder reorganization**: Propose folder reclassifications with `bookmark-reorg`.
@@ -58,6 +60,7 @@ Alternatively, set `BOOKMARKS_DIR` directly for commands that operate on a bookm
 | `BOOKMARK_LLM_MODEL`, `OPENAI_MODEL`, or `MODEL_ID` | Model identifier for classification and LLM summary fallback (default: `gpt-4.1-mini`) |
 | `BOOKMARK_LLM_BASE_URL` or `OPENAI_BASE_URL` | OpenAI-compatible API base URL |
 | `LLM_PROVIDER` | Set to `openrouter` to default the base URL to OpenRouter when no explicit base URL is configured |
+| `BOOKMARK_EMBEDDING_MODEL` | Override the embedding model label stored with embedding rows (default: `text-embedding-3-small`) |
 
 ## Usage
 
@@ -125,6 +128,36 @@ uv run bookmark-search <QUERY> --format csv
 | `--threshold` | Min similarity for semantic/hybrid (default: 0.40) |
 | `--format` | Output format: `text` (default), `json`, or `csv` |
 
+### Rebuild derived state
+
+```bash
+# Rebuild FTS search and embeddings if an API key is configured
+uv run bookmark-rebuild
+
+# Rebuild only the FTS search index
+uv run bookmark-rebuild --no-embeddings
+
+# Scriptable output
+uv run bookmark-rebuild --json
+```
+
+`bookmark-rebuild` reconstructs derived state from canonical Markdown bookmark notes. Deleting `BOOKMARK_SEARCH_INDEX` and running this command restores keyword search. Embeddings are rebuilt when an LLM/embedding API key is configured; otherwise they are skipped with a clear reason.
+
+### Diagnose vault health
+
+```bash
+# Human-readable report with health score
+uv run bookmark-doctor
+
+# JSON report for scripts/CI
+uv run bookmark-doctor --json
+
+# Apply safe repairs such as rebuilding missing/stale search indexes
+uv run bookmark-doctor --fix
+```
+
+`bookmark-doctor` checks configuration, provider availability, schema v1 frontmatter, non-bookmark Markdown under `Bookmarks/`, duplicate URL identities, missing/orphan archives, search DB health/staleness, embedding model/dimension mismatch, and broken Obsidian links. `--fix` only performs safe derived-state repairs; it does not delete notes or mutate user-authored Markdown.
+
 ### Check bookmark health
 
 ```bash
@@ -191,7 +224,7 @@ When you run `uv run bookmark <URL>`, the tool:
 4. Generates a summary via the `summarize` CLI, classifier output, LLM, or heuristic fallback
 5. Writes a structured markdown note with YAML frontmatter to your vault
 
-Bookmark Markdown notes are the canonical system of record; search indexes, embeddings, and archive sidecars are derived/cache data. See `docs/SYSTEM_OF_RECORD.md`.
+Bookmark Markdown notes are the canonical system of record; search indexes, embeddings, and archive sidecars are derived/cache data. Use `bookmark-rebuild` to recreate derived search/embedding state and `bookmark-doctor` to detect drift. See `docs/SYSTEM_OF_RECORD.md`.
 
 ### Summary fallback chain
 
@@ -257,7 +290,7 @@ The server starts on `http://localhost:5000` in debug mode.
 ## Development
 
 ```bash
-uv run pytest tests/             # Run all tests (300 tests)
+uv run pytest tests/             # Run all tests (312 tests)
 uv run pytest tests/test_web_stats.py tests/test_web_bookmarks.py  # Web tests only
 uv run ruff check bookmark_tools tests   # Lint
 uv run ruff format bookmark_tools tests  # Format
@@ -269,8 +302,11 @@ uv run ruff format bookmark_tools tests  # Format
 - `docs/SYSTEM_OF_RECORD.md` — Defines canonical vs derived data categories
 - `docs/PHASE0_CHANGES.md` — Phase 0 implementation details
 - `docs/PHASE1B_CHANGES.md` — Phase 1B schema hardening details
+- `docs/PHASE2_CHANGES.md` — Phase 2 doctor/rebuild implementation details
 - `bookmark_tools/` — Main package source code
+- `bookmark_tools/doctor.py` — Vault health checks, JSON reports, and safe derived-state fixes
+- `bookmark_tools/rebuild.py` — Rebuild derived search/embedding state from Markdown
 - `bookmark_tools/note_schema.py` — Schema v1 parser, renderer, validation, and identity helpers
 - `bookmark_tools/note_filter.py` — Bookmark vs sidecar/non-bookmark filtering for vault scans
 - `bookmark_tools/url_normalize.py` — URL identity and canonicalization
-- `tests/` — Unit and integration tests (300 tests across 20 files)
+- `tests/` — Unit and integration tests (312 tests across 22 files)
