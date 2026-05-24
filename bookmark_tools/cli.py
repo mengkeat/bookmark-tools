@@ -287,10 +287,16 @@ def build_note(
     )
     if existing and force:
         target_path = existing
+        # Read existing note body to preserve human sections during forced overwrite
+        try:
+            existing_note_text = existing.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            existing_note_text = None
     else:
         target_path = uniquify_path(
             (bookmarks_dir / folder) / slugify_filename(str(metadata["title"]))
         )
+        existing_note_text = None
     archive_path = ""
     if archive:
         archive_path = str(
@@ -309,6 +315,7 @@ def build_note(
             archive_path=archive_path,
             classification_model=_classification_model_label(llm_metadata is not None),
             summary_model=SUMMARY_MODEL_LABEL,
+            existing_note_text=existing_note_text,
         ),
         folder_message,
     )

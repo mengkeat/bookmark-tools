@@ -823,6 +823,40 @@ class ForceOverwriteTest(unittest.TestCase):
             self.assertIn("---", note_text)
             self.assertIn("Summary:", note_text)
 
+    def test_force_overwrite_preserves_human_notes(self) -> None:
+        """--force preserves ## Notes sections from the existing note."""
+        with TemporaryDirectory() as tmp:
+            vault_dir, bookmarks_dir = _setup_vault(tmp)
+            existing_url = "https://example.com/intro-ml"
+            existing_note = bookmarks_dir / "ML-AI" / "intro-to-ml.md"
+            # Add a human notes section
+            existing_note.write_text(
+                existing_note.read_text(encoding="utf-8")
+                + "\n## Notes\nThis is my personal annotation.\n",
+                encoding="utf-8",
+            )
+
+            env = {
+                "VAULT_PATH": str(vault_dir),
+                "BOOKMARKS_DIR": str(bookmarks_dir),
+            }
+            with (
+                patch.dict(os.environ, env, clear=True),
+                patch(
+                    "bookmark_tools.fetch.urllib.request.urlopen",
+                    side_effect=lambda req, **kw: _fake_urlopen(req, **kw),
+                ),
+                patch("bookmark_tools.summarize.shutil.which", return_value=None),
+            ):
+                target_path, note_text, _ = build_note(
+                    existing_url, allow_new_subfolder=True, force=True
+                )
+
+            # Human notes section should survive forced overwrite
+            self.assertIn("## Notes\nThis is my personal annotation.", note_text)
+            # Summary should be regenerated (from fetched page)
+            self.assertIn("Summary:", note_text)
+
     def test_without_force_raises_on_duplicate(self) -> None:
         """Without force, build_note raises BookmarkExistsError."""
         with TemporaryDirectory() as tmp:
