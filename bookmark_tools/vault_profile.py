@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .note_filter import iter_bookmark_note_paths
+from .note_schema import SCHEMA_V1_FIELD_ORDER, parse_frontmatter_text, parse_note_text
 from .paths import require_bookmarks_dir
 from .url_normalize import normalize_url
 
@@ -39,20 +40,7 @@ STOPWORDS = {
     "you",
 }
 
-DEFAULT_FIELD_ORDER = [
-    "title",
-    "url",
-    "final_url",
-    "type",
-    "tags",
-    "created",
-    "last_updated",
-    "language",
-    "related",
-    "parent_topic",
-    "visibility",
-    "description",
-]
+DEFAULT_FIELD_ORDER = SCHEMA_V1_FIELD_ORDER
 
 
 @dataclass(frozen=True)
@@ -90,14 +78,9 @@ def list_existing_folders(bookmarks_dir: Path) -> list[str]:
 
 def parse_list(value: str) -> list[str]:
     """Parse a simple bracketed list string into a list of trimmed values."""
-    if not (value.startswith("[") and value.endswith("]")):
-        return []
-    inner = value[1:-1].strip()
-    if not inner:
-        return []
-    return [
-        item.strip().strip("'").strip('"') for item in inner.split(",") if item.strip()
-    ]
+    parsed, _ = parse_frontmatter_text(f"value: {value}")
+    items = parsed.get("value", [])
+    return [str(item) for item in items] if isinstance(items, list) else []
 
 
 def read_frontmatter(note_path: Path) -> tuple[dict[str, object], list[str]]:
@@ -106,20 +89,8 @@ def read_frontmatter(note_path: Path) -> tuple[dict[str, object], list[str]]:
         text = note_path.read_text(encoding="utf-8")
     except UnicodeDecodeError:
         return {}, []
-    if not text.startswith("---\n"):
-        return {}, []
-    frontmatter, _, _ = text[4:].partition("---\n")
-    data: dict[str, object] = {}
-    order: list[str] = []
-    for line in frontmatter.splitlines():
-        if ":" not in line:
-            continue
-        key, raw_value = line.split(":", 1)
-        key = key.strip()
-        value = raw_value.strip()
-        order.append(key)
-        data[key] = parse_list(value) if value.startswith("[") else value.strip('"')
-    return data, order
+    note = parse_note_text(text, path=note_path)
+    return note.frontmatter, note.field_order
 
 
 def parse_frontmatter(note_path: Path) -> dict[str, object]:
@@ -189,6 +160,9 @@ def collect_existing_notes(
         existing_final_url = normalize_url(str(metadata.get("final_url", "")))
         if existing_final_url and existing_final_url not in url_index:
             url_index[existing_final_url] = note_path
+        existing_canonical_url = normalize_url(str(metadata.get("canonical_url", "")))
+        if existing_canonical_url and existing_canonical_url not in url_index:
+            url_index[existing_canonical_url] = note_path
         folder = str(note_path.relative_to(bookmarks_dir).parent)
         folder = "" if folder == "." else folder
         title = str(metadata.get("title", note_path.stem))

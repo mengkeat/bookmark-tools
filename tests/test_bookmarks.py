@@ -441,8 +441,8 @@ class BookmarkHelpersTest(unittest.TestCase):
         self.assertIn("url: https://example.com/short", note)
         self.assertIn("final_url: https://example.com/long-page", note)
 
-    def test_render_note_omits_final_url_when_same(self) -> None:
-        """It does not render final_url when it matches url."""
+    def test_render_note_records_final_url_when_same(self) -> None:
+        """Schema v1 records final_url even when it matches url."""
         profile = BookmarkProfile(
             notes=[],
             folders=["Development"],
@@ -483,10 +483,12 @@ class BookmarkHelpersTest(unittest.TestCase):
             final_url="https://example.com/page",
         )
         self.assertIn("url: https://example.com/page", note)
-        self.assertNotIn("final_url", note)
+        self.assertIn("final_url: https://example.com/page", note)
+        self.assertIn("schema_version: 1", note)
+        self.assertIn("id:", note)
 
-    def test_render_note_omits_final_url_when_none(self) -> None:
-        """It does not render final_url when not provided."""
+    def test_render_note_defaults_final_url_to_url_when_none(self) -> None:
+        """Schema v1 defaults final_url to url when not provided."""
         profile = BookmarkProfile(
             notes=[],
             folders=["Development"],
@@ -526,7 +528,8 @@ class BookmarkHelpersTest(unittest.TestCase):
             profile=profile,
         )
         self.assertIn("url: https://example.com/page", note)
-        self.assertNotIn("final_url", note)
+        self.assertIn("final_url: https://example.com/page", note)
+        self.assertIn("canonical_url: https://example.com/page", note)
 
     def test_find_existing_url_uses_profile_index(self) -> None:
         """It skips filesystem scans when profile index is available."""

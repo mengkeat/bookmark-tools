@@ -18,6 +18,7 @@ from .classify import (
     derive_tags,
     enrich_tags_from_similar,
     find_existing_url,
+    get_llm_config,
     heuristic_classification,
     rank_similar_notes,
     validate_folder,
@@ -36,6 +37,15 @@ MAX_RELATED_ITEMS = 6
 DEFAULT_LANGUAGE = "en"
 DEFAULT_PARENT_TOPIC = "Bookmarks"
 RELATED_TOPIC_PATTERN = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
+SUMMARY_MODEL_LABEL = "summary-pipeline-v1"
+
+
+def _classification_model_label(used_llm_classification: bool) -> str:
+    """Return the model/provenance label for classification metadata."""
+    if not used_llm_classification:
+        return "heuristic"
+    config = get_llm_config()
+    return config["model"] if config else "llm"
 
 
 def _folder_leaf_topic(folder: str) -> str:
@@ -222,6 +232,7 @@ def build_note(
     force: bool = False,
     profile: BookmarkProfile | None = None,
     bookmarks_dir: Path | None = None,
+    archive: bool = False,
 ) -> tuple[Path, str, str]:
     """Build the target note path, rendered note text, and folder decision message."""
     if bookmarks_dir is None:
@@ -280,10 +291,22 @@ def build_note(
         target_path = uniquify_path(
             (bookmarks_dir / folder) / slugify_filename(str(metadata["title"]))
         )
+    archive_path = ""
+    if archive:
+        archive_path = str(
+            target_path.with_suffix(".content.md").relative_to(bookmarks_dir)
+        )
     return (
         target_path,
         render_note(
-            metadata, page_data["url"], profile, final_url=page_data["final_url"]
+            metadata,
+            page_data["url"],
+            profile,
+            final_url=page_data["final_url"],
+            content=page_data["content"],
+            archive_path=archive_path,
+            classification_model=_classification_model_label(llm_metadata is not None),
+            summary_model=SUMMARY_MODEL_LABEL,
         ),
         folder_message,
     )
@@ -481,6 +504,7 @@ def _process_single_url(
             force=force,
             profile=profile,
             bookmarks_dir=bookmarks_dir,
+            archive=archive,
         )
     except BookmarkExistsError as exc:
         logger.warning("%s — skipping %s", exc, url)

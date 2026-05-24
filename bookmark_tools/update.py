@@ -11,7 +11,12 @@ from .classify import (
     rank_similar_notes,
     validate_folder,
 )
-from .cli import configure_logging, normalize_metadata
+from .cli import (
+    SUMMARY_MODEL_LABEL,
+    _classification_model_label,
+    configure_logging,
+    normalize_metadata,
+)
 from .fetch import extract_page_data
 from .note_filter import iter_bookmark_note_paths
 from .paths import BookmarkPathError, load_env, require_bookmarks_dir
@@ -37,7 +42,9 @@ def find_note_by_url(url: str, bookmarks_dir: Path | None = None) -> Path | None
     for note_path in iter_bookmark_note_paths(bookmarks_dir):
         metadata, _ = read_frontmatter(note_path)
         existing_url = normalize_url(str(metadata.get("url", "")))
-        if existing_url == normalized:
+        existing_final_url = normalize_url(str(metadata.get("final_url", "")))
+        existing_canonical_url = normalize_url(str(metadata.get("canonical_url", "")))
+        if normalized in {existing_url, existing_final_url, existing_canonical_url}:
             return note_path
     return None
 
@@ -63,6 +70,7 @@ def update_bookmark(
     if note_path is None:
         return None
 
+    existing_note_text = note_path.read_text(encoding="utf-8")
     old_metadata, _ = read_frontmatter(note_path)
     old_created = str(old_metadata.get("created", "")).strip()
     page_data = extract_page_data(url)
@@ -103,6 +111,10 @@ def update_bookmark(
         profile,
         created_override=old_created or None,
         final_url=page_data["final_url"],
+        content=page_data["content"],
+        classification_model=_classification_model_label(llm_metadata is not None),
+        summary_model=SUMMARY_MODEL_LABEL,
+        existing_note_text=existing_note_text,
     )
 
     if not dry_run:

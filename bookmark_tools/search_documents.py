@@ -68,10 +68,17 @@ def collect_search_documents(
                 body=_extract_body_text(note_path),
             )
         )
-        # Also index final_url text for search matching
+        # Also index final/canonical URL text for search matching
         doc = documents[-1]
-        final_url_text = _normalize_metadata_text(metadata.get("final_url"))
-        if final_url_text:
+        extra_url_text = " ".join(
+            value
+            for value in [
+                _normalize_metadata_text(metadata.get("final_url")),
+                _normalize_metadata_text(metadata.get("canonical_url")),
+            ]
+            if value
+        )
+        if extra_url_text:
             documents[-1] = SearchDocument(
                 path=doc.path,
                 url=doc.url,
@@ -81,6 +88,6 @@ def collect_search_documents(
                 related=doc.related,
                 parent_topic=doc.parent_topic,
                 description=doc.description,
-                body=f"{doc.body} {final_url_text}".strip(),
+                body=f"{doc.body} {extra_url_text}".strip(),
             )
     return documents

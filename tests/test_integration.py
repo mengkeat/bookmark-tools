@@ -908,8 +908,8 @@ class OriginalVsFinalUrlTest(unittest.TestCase):
                 "final_url: https://example.com/final-redirected-page", note_text
             )
 
-    def test_build_note_no_final_url_when_no_redirect(self) -> None:
-        """When URL does not redirect, no final_url field appears."""
+    def test_build_note_records_final_url_when_no_redirect(self) -> None:
+        """Schema v1 records final_url even when URL does not redirect."""
         with TemporaryDirectory() as tmp:
             vault_dir, bookmarks_dir = _setup_vault(tmp)
             env = {
@@ -937,7 +937,8 @@ class OriginalVsFinalUrlTest(unittest.TestCase):
                 )
 
             self.assertIn("url: https://example.com/sample-page", note_text)
-            self.assertNotIn("final_url", note_text)
+            self.assertIn("final_url: https://example.com/sample-page", note_text)
+            self.assertIn("schema_version: 1", note_text)
 
     def test_build_note_detects_duplicate_via_redirect(self) -> None:
         """build_note raises BookmarkExistsError when redirect target is already bookmarked."""

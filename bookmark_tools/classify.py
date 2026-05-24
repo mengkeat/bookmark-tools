@@ -61,6 +61,9 @@ def find_existing_url(url: str, profile: BookmarkProfile | None = None) -> Path 
         existing_final_url = normalize_url(str(metadata.get("final_url", "")))
         if existing_final_url and existing_final_url == normalized:
             return note_path
+        existing_canonical_url = normalize_url(str(metadata.get("canonical_url", "")))
+        if existing_canonical_url and existing_canonical_url == normalized:
+            return note_path
     return None
 
 

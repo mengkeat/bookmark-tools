@@ -65,10 +65,11 @@ def check_bookmarks(
         metadata = parse_frontmatter(note_path)
         url = str(metadata.get("url", "")).strip()
         final_url = str(metadata.get("final_url", "")).strip()
+        canonical_url = str(metadata.get("canonical_url", "")).strip()
         title = str(metadata.get("title", note_path.stem))
         urls_to_check = [
             u
-            for u in [url, final_url]
+            for u in dict.fromkeys([url, final_url, canonical_url])
             if u and (u.startswith("http://") or u.startswith("https://"))
         ]
         if not urls_to_check:

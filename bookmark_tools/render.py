@@ -4,6 +4,13 @@ import datetime as dt
 import re
 from pathlib import Path
 
+from .note_schema import (
+    build_schema_v1_values,
+    parse_note_text,
+    render_schema_v1,
+    yaml_list as _yaml_list,
+    yaml_scalar as _yaml_scalar,
+)
 from .types import NormalizedBookmarkMetadata
 from .vault_profile import BookmarkProfile
 
@@ -17,22 +24,22 @@ def infer_summary(description: str, content: str) -> str:
     return summary[:900].strip() or "Summary unavailable."
 
 
+def yaml_scalar(value: object) -> str:
+    """Serialize a scalar value for YAML frontmatter."""
+    return _yaml_scalar(value)
+
+
+def yaml_list(values: list[str]) -> str:
+    """Serialize a list of strings for inline YAML frontmatter."""
+    return _yaml_list(values)
+
+
 def slugify_filename(title: str) -> str:
     """Convert a note title into a safe markdown filename."""
     title = re.sub(
         r"[^A-Za-z0-9+]+", "-", re.sub(r"[/:]", " ", title.strip() or "Untitled")
     )
     return f"{re.sub(r'-{2,}', '-', title).strip('-') or 'Untitled'}.md"
-
-
-def yaml_scalar(value: str) -> str:
-    """Serialize a scalar value for YAML frontmatter."""
-    return " ".join(value.splitlines()).strip()
-
-
-def yaml_list(values: list[str]) -> str:
-    """Serialize a list of strings for inline YAML frontmatter."""
-    return "[" + ", ".join(yaml_scalar(value) for value in values) + "]"
 
 
 def uniquify_path(path: Path) -> Path:
@@ -54,47 +61,62 @@ def render_note(
     *,
     created_override: str | None = None,
     final_url: str | None = None,
+    canonical_url: str | None = None,
+    content: str = "",
+    archive_path: str = "",
+    classification_model: str = "",
+    summary_model: str = "",
+    source_kind: str = "url",
+    source_path: str = "",
+    source_line: object = "",
+    existing_note_text: str | None = None,
 ) -> str:
-    """Render bookmark metadata into note content with ordered frontmatter."""
+    """Render bookmark metadata into a schema v1 Markdown note."""
     today = dt.date.today().isoformat()
-    values: dict[str, object] = {
-        "title": str(metadata["title"]).strip(),
-        "url": url,
-        "type": str(metadata["type"]).strip(),
-        "tags": [
-            str(tag).strip() for tag in metadata.get("tags", []) if str(tag).strip()
-        ],
-        "created": created_override if created_override else today,
-        "last_updated": today,
-        "language": str(metadata.get("language", "en")).strip() or "en",
-        "related": [
+    existing_note = (
+        parse_note_text(existing_note_text or "") if existing_note_text else None
+    )
+    existing_metadata = existing_note.frontmatter if existing_note else {}
+    existing_body = existing_note.body if existing_note else ""
+    created = (
+        created_override or str(existing_metadata.get("created", "")).strip() or today
+    )
+    values = build_schema_v1_values(
+        title=str(metadata["title"]).strip(),
+        url=url,
+        final_url=final_url or url,
+        canonical_url=canonical_url,
+        bookmark_type=str(metadata["type"]).strip(),
+        tags=[str(tag).strip() for tag in metadata.get("tags", []) if str(tag).strip()],
+        created=created,
+        last_updated=today,
+        language=str(metadata.get("language", "en")).strip() or "en",
+        related=[
             str(item).strip()
             for item in metadata.get("related", [])
             if str(item).strip()
         ],
-        "parent_topic": str(metadata.get("parent_topic", "")).strip()
+        parent_topic=str(metadata.get("parent_topic", "")).strip()
         or str(metadata["folder"]).split("/")[-1],
-        "description": str(metadata.get("description", metadata["title"])).strip(),
-        "visibility": str(
+        visibility=str(
             metadata.get("visibility", profile.default_visibility or "private")
         ),
-    }
-    if final_url and final_url != url:
-        values["final_url"] = final_url
-    frontmatter_lines = ["---"]
-    for key in profile.schema:
-        if key == "summary" or key not in values:
-            continue
-        value = values[key]
-        if isinstance(value, list):
-            frontmatter_lines.append(
-                f"{key}: {yaml_list([str(item) for item in value if str(item).strip()])}"
-            )
-        elif key in {"created", "last_updated"}:
-            frontmatter_lines.append(f"{key}: {value}")
-        else:
-            frontmatter_lines.append(f"{key}: {yaml_scalar(str(value))}")
-    frontmatter_lines.extend(
-        ["---", "", "Summary:", str(metadata.get("summary", "")).strip(), ""]
+        description=str(metadata.get("description", metadata["title"])).strip(),
+        content=content,
+        archive_path=archive_path,
+        classification_model=classification_model,
+        summary_model=summary_model,
+        source_kind=source_kind,
+        source_path=source_path,
+        source_line=source_line,
+        existing_metadata=existing_metadata,
     )
-    return "\n".join(frontmatter_lines)
+    return render_schema_v1(
+        values,
+        summary=str(metadata.get("summary", "")).strip(),
+        field_order=[
+            *profile.schema,
+            *(existing_note.field_order if existing_note else []),
+        ],
+        existing_body=existing_body,
+    )
