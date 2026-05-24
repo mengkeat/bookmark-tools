@@ -38,7 +38,7 @@ def find_note_by_url(url: str, bookmarks_dir: Path | None = None) -> Path | None
         bookmarks_dir = require_bookmarks_dir()
     normalized = normalize_url(url)
 
-    for note_path in iter_bookmark_note_paths(bookmarks_dir):
+    for note_path in iter_bookmark_note_paths(bookmarks_dir, bookmark_only=True):
         metadata, _ = read_frontmatter(note_path)
         existing_url = normalize_url(str(metadata.get("url", "")))
         existing_final_url = normalize_url(str(metadata.get("final_url", "")))

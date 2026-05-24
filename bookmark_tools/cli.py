@@ -567,20 +567,21 @@ def _process_single_url(
             print("Skipped.")
             return 1
     target_path.parent.mkdir(parents=True, exist_ok=True)
-    target_path.write_text(note_text, encoding="utf-8")
-    print(f"Created {target_path}")
-    if folder_message:
-        print(folder_message)
+    # Write archive first if requested, so archive_path metadata is truthful
     if archive:
         from .fetch import clean_html, fetch_text
 
         try:
             _, raw_html = fetch_text(url)
             cleaned = clean_html(raw_html)
-            archive_path = _save_archive(target_path, cleaned)
-            print(f"Archived {archive_path}")
+            archive_file = _save_archive(target_path, cleaned)
+            print(f"Archived {archive_file}")
         except Exception as exc:
             logger.warning("Failed to archive content for %s: %s", url, exc)
+    target_path.write_text(note_text, encoding="utf-8")
+    print(f"Created {target_path}")
+    if folder_message:
+        print(folder_message)
     return 0
 
 

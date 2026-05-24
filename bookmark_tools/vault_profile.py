@@ -151,7 +151,7 @@ def collect_existing_notes(
     visibility_values: list[str] = []
     url_index: dict[str, Path] = {}
 
-    for note_path in iter_bookmark_note_paths(bookmarks_dir):
+    for note_path in iter_bookmark_note_paths(bookmarks_dir, bookmark_only=True):
         metadata, order = read_frontmatter(note_path)
         field_orders.append(order)
         existing_url = normalize_url(str(metadata.get("url", "")))

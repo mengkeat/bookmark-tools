@@ -74,6 +74,28 @@ class NoteSchemaParseTest(unittest.TestCase):
             self.assertFalse(is_bookmark_note(no_url))
             self.assertFalse(is_bookmark_note(sidecar))
 
+    def test_iter_bookmark_note_paths_filters_non_bookmarks(self) -> None:
+        """bookmark_only=True skips Markdown files without a url field."""
+        from bookmark_tools.note_filter import iter_bookmark_note_paths
+
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            bookmark = root / "bookmark.md"
+            bookmark.write_text(
+                "---\nurl: https://example.com\n---\n", encoding="utf-8"
+            )
+            plain_note = root / "note.md"
+            plain_note.write_text("---\ntitle: Just a note\n---\n", encoding="utf-8")
+            sidecar = root / "bookmark.content.md"
+            sidecar.write_text("---\nurl: https://x.com\n---\n", encoding="utf-8")
+
+            all_paths = list(iter_bookmark_note_paths(root))
+            bookmark_paths = list(iter_bookmark_note_paths(root, bookmark_only=True))
+
+            self.assertEqual(len(all_paths), 2)  # bookmark + plain_note
+            self.assertEqual(len(bookmark_paths), 1)
+            self.assertEqual(bookmark_paths[0].name, "bookmark.md")
+
 
 class NoteSchemaIdentityTest(unittest.TestCase):
     def test_stable_id_uses_normalized_original_url(self) -> None:

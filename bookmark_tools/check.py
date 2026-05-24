@@ -61,7 +61,7 @@ def check_bookmarks(
         bookmarks_dir = require_bookmarks_dir()
 
     problems: list[dict[str, object]] = []
-    for note_path in iter_bookmark_note_paths(bookmarks_dir):
+    for note_path in iter_bookmark_note_paths(bookmarks_dir, bookmark_only=True):
         metadata = parse_frontmatter(note_path)
         url = str(metadata.get("url", "")).strip()
         final_url = str(metadata.get("final_url", "")).strip()

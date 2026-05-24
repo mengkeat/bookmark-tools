@@ -52,7 +52,7 @@ def collect_search_documents(
     if bookmarks_dir is None:
         bookmarks_dir = require_bookmarks_dir()
     documents: list[SearchDocument] = []
-    for note_path in iter_bookmark_note_paths(bookmarks_dir):
+    for note_path in iter_bookmark_note_paths(bookmarks_dir, bookmark_only=True):
         metadata, _ = read_frontmatter(note_path)
         relative_folder = str(note_path.relative_to(bookmarks_dir).parent)
         documents.append(
