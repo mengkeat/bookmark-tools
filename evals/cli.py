@@ -5,7 +5,7 @@ import sys
 from pathlib import Path
 from typing import Sequence
 
-SUITES = ["search", "ablation"]
+SUITES = ["search", "ablation", "classification"]
 
 
 def _cmd_list_suites(_args: argparse.Namespace) -> int:
@@ -43,6 +43,15 @@ def _cmd_run(args: argparse.Namespace) -> int:
             k_values=[5, 10],
             limit=args.limit,
             query_limit=args.query_limit,
+        )
+    if args.suite == "classification":
+        from evals.runners.classification import run_classification
+
+        return run_classification(
+            fixtures_path=Path(args.fixtures) if args.fixtures else None,
+            limit=args.query_limit,
+            bookmarks_dir=Path(args.bookmarks_dir) if args.bookmarks_dir else None,
+            force_heuristic=args.force_heuristic,
         )
     print(f"Unknown suite: {args.suite!r}", file=sys.stderr)
     return 1
@@ -98,6 +107,21 @@ def build_parser() -> argparse.ArgumentParser:
         "--dimensions",
         default="256,512",
         help="Comma-separated dimension counts for ablation (default: 256,512)",
+    )
+    run_p.add_argument(
+        "--fixtures",
+        default=None,
+        help="Classification fixture YAML path (default: bundled fixtures)",
+    )
+    run_p.add_argument(
+        "--bookmarks-dir",
+        default=None,
+        help="Existing Bookmarks directory for classification profile context",
+    )
+    run_p.add_argument(
+        "--force-heuristic",
+        action="store_true",
+        help="Skip LLM classification for deterministic classification smoke-tests",
     )
 
     diff_p = sub.add_parser("diff", help="Compare two snapshot JSON files")

@@ -1,0 +1,69 @@
+# Classification eval fixtures
+#
+# This seed set is intentionally small and deterministic so
+# `bookmark-eval run classification --force-heuristic` works as a cheap smoke
+# test without network or LLM calls. Grow it over time by adding 30-80 labeled
+# cases from your vault or hand-curated edge cases.
+#
+# Schema:
+#   profile_folders: Optional synthetic folders used when --bookmarks-dir is not
+#     provided. With --bookmarks-dir, the runner uses your real vault profile.
+#   profile_notes: Optional synthetic notes used for similarity context.
+#   cases:
+#     - id: Stable case id
+#       content_or_url: Plain text content OR an http(s)/file URL
+#       # Alternative source fields: url, content, html
+#       title: Optional title used for content/html fixtures
+#       description: Optional description used for content/html fixtures
+#       expected_folder: Exact folder expected after folder validation
+#       expected_type: article | video | course | tool | paper | book
+#       expected_tags: Tags treated as the relevant set for tag P/R/F1
+#       profile_folders: Optional per-case synthetic folders
+#       profile_notes: Optional per-case synthetic notes for similarity context
+#       allow_new_subfolder: Optional bool, default false
+#
+# Bootstrap idea: copy existing curated note frontmatter into cases, using the
+# note body or archived content as `content`. The snapshot records
+# classification_prompt_version so prompt/model changes are attributable.
+
+profile_folders:
+  - Development
+
+cases:
+  - id: dev-python-cli
+    title: Python Command Line Tooling Guide
+    description: A practical article about Python command line applications and developer workflow.
+    content_or_url: |
+      Python command line tooling guide for developers. It explains argparse,
+      terminal UX, packaging, and reliable automation patterns for internal
+      developer tools.
+    expected_folder: Development
+    expected_type: article
+    expected_tags:
+      - development
+      - python
+
+  - id: dev-sqlite-fts
+    title: SQLite FTS5 Search Notes
+    description: A technical article about SQLite full text search and indexing.
+    content_or_url: |
+      SQLite FTS5 search notes covering tokenizer choices, BM25 ranking,
+      incremental indexing, and query syntax for local developer tools.
+    expected_folder: Development
+    expected_type: article
+    expected_tags:
+      - development
+      - sqlite
+
+  - id: dev-testing-strategy
+    title: Python Testing Strategy
+    description: A guide to unit tests, integration tests, and smoke tests for Python projects.
+    content_or_url: |
+      This Python testing strategy explains unit tests, integration tests,
+      smoke tests, fixtures, and how developers can keep command line tools
+      reliable during refactors.
+    expected_folder: Development
+    expected_type: article
+    expected_tags:
+      - development
+      - python
