@@ -5,8 +5,8 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .note_filter import iter_bookmark_note_paths
+from .note_schema import parse_note_text
 from .paths import require_bookmarks_dir
-from .vault_profile import read_frontmatter
 
 WHITESPACE_PATTERN = re.compile(r"\s+")
 
@@ -34,15 +34,12 @@ def _normalize_metadata_text(value: object) -> str:
     return WHITESPACE_PATTERN.sub(" ", str(value)).strip()
 
 
-def _extract_body_text(note_path: Path) -> str:
-    """Read a note body and remove frontmatter when present."""
+def _read_note_text(path: Path) -> str:
+    """Read note text, returning empty string on decode errors."""
     try:
-        text = note_path.read_text(encoding="utf-8")
-    except UnicodeDecodeError:
+        return path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
         return ""
-    if text.startswith("---\n"):
-        _, _, text = text[4:].partition("---\n")
-    return WHITESPACE_PATTERN.sub(" ", text).strip()
 
 
 def collect_search_documents(
@@ -53,8 +50,24 @@ def collect_search_documents(
         bookmarks_dir = require_bookmarks_dir()
     documents: list[SearchDocument] = []
     for note_path in iter_bookmark_note_paths(bookmarks_dir, bookmark_only=True):
-        metadata, _ = read_frontmatter(note_path)
+        raw_text = _read_note_text(note_path)
+        note = parse_note_text(raw_text, path=note_path)
+        metadata = note.frontmatter
+        body = WHITESPACE_PATTERN.sub(" ", note.body).strip()
         relative_folder = str(note_path.relative_to(bookmarks_dir).parent)
+
+        # Append final/canonical URL text for search matching
+        extra_url_text = " ".join(
+            value
+            for value in [
+                _normalize_metadata_text(metadata.get("final_url")),
+                _normalize_metadata_text(metadata.get("canonical_url")),
+            ]
+            if value
+        )
+        if extra_url_text:
+            body = f"{body} {extra_url_text}".strip()
+
         documents.append(
             SearchDocument(
                 path=note_path,
@@ -65,29 +78,7 @@ def collect_search_documents(
                 related=_normalize_metadata_text(metadata.get("related")),
                 parent_topic=_normalize_metadata_text(metadata.get("parent_topic")),
                 description=_normalize_metadata_text(metadata.get("description")),
-                body=_extract_body_text(note_path),
+                body=body,
             )
         )
-        # Also index final/canonical URL text for search matching
-        doc = documents[-1]
-        extra_url_text = " ".join(
-            value
-            for value in [
-                _normalize_metadata_text(metadata.get("final_url")),
-                _normalize_metadata_text(metadata.get("canonical_url")),
-            ]
-            if value
-        )
-        if extra_url_text:
-            documents[-1] = SearchDocument(
-                path=doc.path,
-                url=doc.url,
-                title=doc.title,
-                folder=doc.folder,
-                tags=doc.tags,
-                related=doc.related,
-                parent_topic=doc.parent_topic,
-                description=doc.description,
-                body=f"{doc.body} {extra_url_text}".strip(),
-            )
     return documents
