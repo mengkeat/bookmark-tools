@@ -13,9 +13,9 @@ from .classify import (
 )
 from .cli import (
     _classification_model_label,
-    configure_logging,
     normalize_metadata,
 )
+from .logging_config import configure_logging
 from .fetch import extract_page_data
 from .note_filter import iter_bookmark_note_paths
 from .paths import BookmarkPathError, load_env, require_bookmarks_dir

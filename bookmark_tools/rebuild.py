@@ -134,7 +134,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     """Run the rebuild command."""
     load_env()
     args = parse_args(argv)
-    from .cli import configure_logging
+    from .logging_config import configure_logging
 
     configure_logging(verbose=args.verbose, quiet=args.quiet)
     try:

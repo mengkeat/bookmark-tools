@@ -3,7 +3,6 @@ from __future__ import annotations
 import argparse
 import concurrent.futures
 import logging
-import os
 import re
 import urllib.error
 from pathlib import Path
@@ -24,6 +23,7 @@ from .classify import (
     validate_folder,
 )
 from .fetch import extract_page_data
+from .logging_config import configure_logging
 from .paths import BookmarkPathError, require_bookmarks_dir, load_env
 from .render import infer_summary, render_note, slugify_filename, uniquify_path
 from .summarize import generate_summary
@@ -402,21 +402,6 @@ def parse_args() -> argparse.Namespace:
         help="Suppress all logging output except errors",
     )
     return parser.parse_args()
-
-
-def configure_logging(*, verbose: bool = False, quiet: bool = False) -> None:
-    """Configure root logging based on CLI flags and LOG_LEVEL env var."""
-    if verbose:
-        level = logging.DEBUG
-    elif quiet:
-        level = logging.ERROR
-    else:
-        env_level = os.environ.get("LOG_LEVEL", "").upper()
-        level = getattr(logging, env_level, logging.INFO)
-    logging.basicConfig(
-        format="%(levelname)s: %(message)s",
-        level=level,
-    )
 
 
 def _read_urls_from_file(file_path: str) -> list[tuple[str, int]]:
