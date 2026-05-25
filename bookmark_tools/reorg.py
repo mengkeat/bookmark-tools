@@ -12,6 +12,7 @@ from .classify import (
     rank_similar_notes,
 )
 from .paths import BookmarkPathError, load_env, require_bookmarks_dir
+from .types import PageData
 from .vault_profile import collect_existing_notes
 
 logger = logging.getLogger(__name__)
@@ -39,12 +40,17 @@ def propose_reclassifications(
         if not url or not (url.startswith("http://") or url.startswith("https://")):
             continue
 
-        page_data = {
+        page_data: PageData = {
             "url": url,
+            "final_url": url,
+            "canonical_url": url,
             "title": note.title,
             "description": note.description,
             "language": "en",
             "content": note.title,
+            "full_content": note.title,
+            "http_status": 0,
+            "content_type": "",
         }
 
         similar_notes = rank_similar_notes(page_data, profile)
