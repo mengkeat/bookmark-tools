@@ -7,6 +7,7 @@ from typing import Sequence
 
 from .classify import (
     call_llm,
+    find_existing_url,
     heuristic_classification,
     rank_similar_notes,
     validate_folder,
@@ -15,9 +16,8 @@ from .cli import (
     _classification_model_label,
     normalize_metadata,
 )
-from .logging_config import configure_logging
 from .fetch import extract_page_data
-from .note_filter import iter_bookmark_note_paths
+from .logging_config import configure_logging
 from .paths import BookmarkPathError, load_env, require_bookmarks_dir
 from .render import render_note
 from .summarize import generate_summary
@@ -30,22 +30,13 @@ logger = logging.getLogger(__name__)
 def find_note_by_url(url: str, bookmarks_dir: Path | None = None) -> Path | None:
     """Find a bookmark note file by its URL.
 
-    Performs a full vault scan.  Prefer passing a pre-built
-    ``BookmarkProfile`` and using ``profile.url_index`` directly when a
-    profile is already available, to avoid scanning the vault twice.
+    Delegates to :func:`classify.find_existing_url` with a fresh profile
+    when *bookmarks_dir* is given.
     """
     if bookmarks_dir is None:
         bookmarks_dir = require_bookmarks_dir()
-    normalized = normalize_url(url)
-
-    for note_path in iter_bookmark_note_paths(bookmarks_dir, bookmark_only=True):
-        metadata, _ = read_frontmatter(note_path)
-        existing_url = normalize_url(str(metadata.get("url", "")))
-        existing_final_url = normalize_url(str(metadata.get("final_url", "")))
-        existing_canonical_url = normalize_url(str(metadata.get("canonical_url", "")))
-        if normalized in {existing_url, existing_final_url, existing_canonical_url}:
-            return note_path
-    return None
+    profile = collect_existing_notes(bookmarks_dir=bookmarks_dir)
+    return find_existing_url(url, profile)
 
 
 def update_bookmark(
