@@ -217,6 +217,26 @@ def _delete_by_paths(connection: sqlite3.Connection, paths: set[str]) -> None:
         connection.execute(f"DELETE FROM {EMBEDDING_TABLE} WHERE path = ?", (path,))
 
 
+def delete_from_embedding_store(
+    path: Path,
+    *,
+    database_path: Path | None = None,
+) -> None:
+    """Remove a single note from the embedding store."""
+    if database_path is None:
+        database_path = get_search_index_path()
+    if not database_path.exists():
+        return
+    connection = _connect(database_path)
+    try:
+        with connection:
+            _delete_by_paths(connection, {str(path)})
+    except sqlite3.OperationalError:
+        pass
+    finally:
+        connection.close()
+
+
 def _insert_embeddings(
     connection: sqlite3.Connection,
     documents: list[SearchDocument],

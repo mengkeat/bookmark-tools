@@ -136,6 +136,26 @@ def _delete_by_paths(
         connection.execute(f"DELETE FROM {MTIME_TABLE} WHERE path = ?", (path,))
 
 
+def delete_from_search_index(
+    path: Path,
+    *,
+    database_path: Path | None = None,
+) -> None:
+    """Remove a single note from the FTS5 search index and mtime table."""
+    if database_path is None:
+        database_path = get_search_index_path()
+    if not database_path.exists():
+        return
+    connection = _connect(database_path)
+    try:
+        with connection:
+            _delete_by_paths(connection, {str(path)})
+    except sqlite3.OperationalError:
+        pass
+    finally:
+        connection.close()
+
+
 def _load_stored_mtimes(connection: sqlite3.Connection) -> dict[str, float]:
     """Load the path-to-mtime mapping from the database."""
     rows = connection.execute(f"SELECT path, mtime FROM {MTIME_TABLE}").fetchall()
