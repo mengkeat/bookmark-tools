@@ -1,0 +1,40 @@
+# Personal bookmark retrieval queries
+#
+# Each entry is a query you'd type to find a specific bookmark, paired with
+# the expected relevant note IDs. The eval runner scores how well BM25,
+# semantic, and hybrid search surface those notes.
+#
+# Schema:
+#   - query:         The search text (required)
+#     relevant_ids:  List of note `id:` values — SHA-256 of the normalized URL (required)
+#     mode_hint:     bm25 | semantic | hybrid  (optional, documents which mode should excel)
+#     notes:         Context or rationale (optional)
+#
+# Finding a note's id:
+#   grep "^id:" "/path/to/note.md"
+#   OR: bookmark-search "<title>" --format json | python -c "import sys,json; [print(r['path']) for r in json.load(sys.stdin)]"
+#   Then: grep "^id:" "<path>"
+#
+# Validation: bookmark-eval run search --dataset personal checks that every
+# relevant_id exists in the current vault. IDs are stable across renames and
+# reorgs (they are the SHA-256 of the canonical URL).
+#
+# Examples (replace with your own):
+#
+# - query: "sqlite full text search python"
+#   relevant_ids:
+#     - 4a8f2c1e...  # replace with actual 64-char hex ID
+#   mode_hint: bm25
+#   notes: FTS5 tutorial bookmarked from sqlite.org docs
+#
+# - query: "managing attention focus productivity"
+#   relevant_ids:
+#     - b91d3f7a...
+#     - c23e5b8d...
+#   mode_hint: semantic
+#   notes: Two essays on deep work — semantic search should find both
+#
+# - query: "vector embeddings cosine similarity"
+#   relevant_ids:
+#     - 7f4c9a2b...
+#   mode_hint: hybrid

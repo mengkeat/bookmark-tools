@@ -53,7 +53,7 @@ def build_parser() -> argparse.ArgumentParser:
     run_p.add_argument(
         "--dataset",
         default="beir:nfcorpus",
-        help="Dataset to use, e.g. beir:nfcorpus or beir:scifact (default: beir:nfcorpus)",
+        help="Dataset: beir:nfcorpus, beir:scifact, or personal (default: beir:nfcorpus)",
     )
     run_p.add_argument(
         "--mode",
