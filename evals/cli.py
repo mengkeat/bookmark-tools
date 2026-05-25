@@ -5,7 +5,7 @@ import sys
 from pathlib import Path
 from typing import Sequence
 
-SUITES = ["search", "ablation", "classification"]
+SUITES = ["search", "ablation", "classification", "e2e"]
 
 
 def _cmd_list_suites(_args: argparse.Namespace) -> int:
@@ -51,6 +51,14 @@ def _cmd_run(args: argparse.Namespace) -> int:
             fixtures_path=Path(args.fixtures) if args.fixtures else None,
             limit=args.query_limit,
             bookmarks_dir=Path(args.bookmarks_dir) if args.bookmarks_dir else None,
+            force_heuristic=args.force_heuristic,
+        )
+    if args.suite == "e2e":
+        from evals.runners.e2e import run_e2e
+
+        return run_e2e(
+            cases_path=Path(args.cases) if args.cases else None,
+            limit=args.query_limit,
             force_heuristic=args.force_heuristic,
         )
     print(f"Unknown suite: {args.suite!r}", file=sys.stderr)
@@ -114,6 +122,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="Classification fixture YAML path (default: bundled fixtures)",
     )
     run_p.add_argument(
+        "--cases",
+        default=None,
+        help="E2E cases YAML path (default: bundled cases)",
+    )
+    run_p.add_argument(
         "--bookmarks-dir",
         default=None,
         help="Existing Bookmarks directory for classification profile context",
@@ -121,7 +134,7 @@ def build_parser() -> argparse.ArgumentParser:
     run_p.add_argument(
         "--force-heuristic",
         action="store_true",
-        help="Skip LLM classification for deterministic classification smoke-tests",
+        help="Skip LLM classification for deterministic classification/e2e smoke-tests",
     )
 
     diff_p = sub.add_parser("diff", help="Compare two snapshot JSON files")

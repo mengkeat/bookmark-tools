@@ -1,0 +1,45 @@
+# End-to-end ingest eval cases
+#
+# These cases run the bookmark ingest pipeline into a temporary vault, then
+# build a BM25 index and assert retrieval queries find the newly created note.
+# The bundled case uses inline HTML so smoke tests are deterministic and avoid
+# network calls; omit `html` to fetch the `url` over the network.
+#
+# Schema:
+#   - id: Stable case id
+#     url: URL to ingest. If `html` is present, it is materialized as a local
+#       file:// URL for deterministic smoke tests; otherwise this URL is fetched.
+#     html: Optional inline HTML fixture
+#     expected_folder: Exact folder expected after ingest folder validation
+#     expected_type: article | video | course | tool | paper | book
+#     expected_tags: Tags treated as the relevant set for tag P/R/F1
+#     retrieval_queries:
+#       - query: Query to run after ingest
+#         must_be_in_top_k: Expected top-k cutoff, default 5
+#     allow_new_subfolder: Optional bool, default false
+
+cases:
+  - id: example-domain-local
+    url: https://example.com/
+    html: |
+      <!doctype html>
+      <html lang="en">
+      <head>
+        <title>Example Domain</title>
+        <meta name="description" content="A local fixture used to test bookmark ingest and retrieval.">
+      </head>
+      <body>
+        <h1>Example Domain</h1>
+        <p>This deterministic example domain fixture is used for bookmark
+        ingestion smoke tests, retrieval checks, and developer workflow
+        validation.</p>
+      </body>
+      </html>
+    expected_folder: Development
+    expected_type: article
+    expected_tags:
+      - development
+      - example
+    retrieval_queries:
+      - query: example domain
+        must_be_in_top_k: 5
