@@ -43,10 +43,11 @@ def _ranked_ids_semantic(
     db_path: Path,
     id_for_path: Callable[[Path], str | None],
     limit: int,
+    config: dict[str, str] | None = None,
 ) -> list[str]:
     from bookmark_tools.embeddings import semantic_search
 
-    matches = semantic_search(query, database_path=db_path, limit=limit, threshold=0.0)
+    matches = semantic_search(query, database_path=db_path, limit=limit, threshold=0.0, config=config)
     return [rid for m in matches if (rid := id_for_path(m.path))]
 
 
@@ -56,13 +57,14 @@ def _ranked_ids_hybrid(
     db_path: Path,
     id_for_path: Callable[[Path], str | None],
     limit: int,
+    config: dict[str, str] | None = None,
 ) -> list[str]:
     from bookmark_tools.embeddings import semantic_search
     from bookmark_tools.search import _embedding_match_to_result, _reciprocal_rank_fusion
     from bookmark_tools.search_index import search_index
 
     bm25_r = search_index(query, database_path=db_path, limit=limit * 3)
-    sem_m = semantic_search(query, database_path=db_path, limit=limit * 3, threshold=0.0)
+    sem_m = semantic_search(query, database_path=db_path, limit=limit * 3, threshold=0.0, config=config)
     sem_r = [_embedding_match_to_result(m) for m in sem_m]
     fused = _reciprocal_rank_fusion(bm25_r, sem_r, limit)
     return [rid for r in fused if (rid := id_for_path(r.path))]
@@ -76,6 +78,7 @@ def _score_queries(
     modes: list[str],
     k_values: list[int],
     limit: int,
+    config: dict[str, str] | None = None,
 ) -> dict[str, dict[str, float]]:
     """Run all modes against a query list; return metrics_by_mode."""
     from evals.metrics import aggregate_metrics, score_query
@@ -89,9 +92,9 @@ def _score_queries(
                 if mode == "bm25":
                     ranked = _ranked_ids_bm25(q["text"], db_path=db_path, id_for_path=id_for_path, limit=limit)
                 elif mode == "semantic":
-                    ranked = _ranked_ids_semantic(q["text"], db_path=db_path, id_for_path=id_for_path, limit=limit)
+                    ranked = _ranked_ids_semantic(q["text"], db_path=db_path, id_for_path=id_for_path, limit=limit, config=config)
                 else:
-                    ranked = _ranked_ids_hybrid(q["text"], db_path=db_path, id_for_path=id_for_path, limit=limit)
+                    ranked = _ranked_ids_hybrid(q["text"], db_path=db_path, id_for_path=id_for_path, limit=limit, config=config)
             except ValueError:
                 ranked = []
             per_query.append(score_query(ranked, q["relevant"], k_values))

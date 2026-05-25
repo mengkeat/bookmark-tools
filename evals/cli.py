@@ -5,7 +5,7 @@ import sys
 from pathlib import Path
 from typing import Sequence
 
-SUITES = ["search"]
+SUITES = ["search", "ablation"]
 
 
 def _cmd_list_suites(_args: argparse.Namespace) -> int:
@@ -23,6 +23,22 @@ def _cmd_run(args: argparse.Namespace) -> int:
         modes = ["bm25", "semantic", "hybrid"] if raw_modes == ["all"] else raw_modes
         return run_search(
             dataset=args.dataset,
+            modes=modes,
+            k_values=[5, 10],
+            limit=args.limit,
+            query_limit=args.query_limit,
+        )
+    if args.suite == "ablation":
+        from evals.runners.embedding_ablation import run_ablation
+
+        raw_modes = args.mode.split(",")
+        modes = ["bm25", "semantic", "hybrid"] if raw_modes == ["all"] else raw_modes
+        models = [m.strip() for m in args.models.split(",") if m.strip()]
+        dimensions = [int(d.strip()) for d in args.dimensions.split(",") if d.strip()]
+        return run_ablation(
+            dataset=args.dataset,
+            models=models,
+            dimensions=dimensions,
             modes=modes,
             k_values=[5, 10],
             limit=args.limit,
@@ -72,6 +88,16 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         dest="query_limit",
         help="Evaluate only the first N queries (useful for quick smoke-tests)",
+    )
+    run_p.add_argument(
+        "--models",
+        default="text-embedding-3-small",
+        help="Comma-separated embedding models for ablation (default: text-embedding-3-small)",
+    )
+    run_p.add_argument(
+        "--dimensions",
+        default="256,512",
+        help="Comma-separated dimension counts for ablation (default: 256,512)",
     )
 
     diff_p = sub.add_parser("diff", help="Compare two snapshot JSON files")
