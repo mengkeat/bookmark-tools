@@ -85,15 +85,26 @@ def load_queries(dataset_dir: Path) -> list[dict[str, str]]:
 
 
 def load_qrels(dataset_dir: Path, split: str = "test") -> dict[str, set[str]]:
-    """Load qrels/<split>.tsv → {query_id → set of relevant doc_ids}."""
+    """Load qrels/<split>.tsv → {query_id → set of relevant doc_ids}.
+
+    Handles both BEIR 3-column format (query-id, corpus-id, score) and
+    legacy TREC 4-column format (query-id, iter, doc-id, relevance).
+    """
     qrels: dict[str, set[str]] = {}
     path = dataset_dir / "qrels" / f"{split}.tsv"
     with path.open(encoding="utf-8") as fh:
         for line in fh:
             parts = line.strip().split("\t")
-            if len(parts) < 4 or parts[0] in ("query-id", ""):
+            if not parts or parts[0] in ("query-id", ""):
                 continue
-            query_id, _iter, doc_id, relevance = parts[:4]
+            if len(parts) == 3:
+                # BEIR format: query-id, corpus-id, score
+                query_id, doc_id, relevance = parts
+            elif len(parts) >= 4:
+                # TREC format: query-id, iter, doc-id, relevance
+                query_id, _iter, doc_id, relevance = parts[:4]
+            else:
+                continue
             try:
                 if int(relevance) > 0:
                     qrels.setdefault(query_id, set()).add(doc_id)

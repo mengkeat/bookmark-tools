@@ -11,7 +11,7 @@ from .search_documents import SearchDocument
 SEARCH_TABLE = "bookmark_search"
 MTIME_TABLE = "bookmark_mtime"
 BM25_WEIGHTS = (0.0, 0.0, 8.0, 3.0, 4.0, 4.0, 3.0, 2.0, 1.0)
-QUERY_TERM_PATTERN = re.compile(r"[A-Za-z0-9+#-]{2,}")
+QUERY_TERM_PATTERN = re.compile(r"[A-Za-z0-9]{2,}")
 
 
 SNIPPET_MAX_TOKENS = 10
