@@ -47,7 +47,9 @@ def _ranked_ids_semantic(
 ) -> list[str]:
     from bookmark_tools.embeddings import semantic_search
 
-    matches = semantic_search(query, database_path=db_path, limit=limit, threshold=0.0, config=config)
+    matches = semantic_search(
+        query, database_path=db_path, limit=limit, threshold=0.0, config=config
+    )
     return [rid for m in matches if (rid := id_for_path(m.path))]
 
 
@@ -60,11 +62,16 @@ def _ranked_ids_hybrid(
     config: dict[str, str] | None = None,
 ) -> list[str]:
     from bookmark_tools.embeddings import semantic_search
-    from bookmark_tools.search import _embedding_match_to_result, _reciprocal_rank_fusion
+    from bookmark_tools.search import (
+        _embedding_match_to_result,
+        _reciprocal_rank_fusion,
+    )
     from bookmark_tools.search_index import search_index
 
     bm25_r = search_index(query, database_path=db_path, limit=limit * 3)
-    sem_m = semantic_search(query, database_path=db_path, limit=limit * 3, threshold=0.0, config=config)
+    sem_m = semantic_search(
+        query, database_path=db_path, limit=limit * 3, threshold=0.0, config=config
+    )
     sem_r = [_embedding_match_to_result(m) for m in sem_m]
     fused = _reciprocal_rank_fusion(bm25_r, sem_r, limit)
     return [rid for r in fused if (rid := id_for_path(r.path))]
@@ -90,11 +97,25 @@ def _score_queries(
         for q in queries:
             try:
                 if mode == "bm25":
-                    ranked = _ranked_ids_bm25(q["text"], db_path=db_path, id_for_path=id_for_path, limit=limit)
+                    ranked = _ranked_ids_bm25(
+                        q["text"], db_path=db_path, id_for_path=id_for_path, limit=limit
+                    )
                 elif mode == "semantic":
-                    ranked = _ranked_ids_semantic(q["text"], db_path=db_path, id_for_path=id_for_path, limit=limit, config=config)
+                    ranked = _ranked_ids_semantic(
+                        q["text"],
+                        db_path=db_path,
+                        id_for_path=id_for_path,
+                        limit=limit,
+                        config=config,
+                    )
                 else:
-                    ranked = _ranked_ids_hybrid(q["text"], db_path=db_path, id_for_path=id_for_path, limit=limit, config=config)
+                    ranked = _ranked_ids_hybrid(
+                        q["text"],
+                        db_path=db_path,
+                        id_for_path=id_for_path,
+                        limit=limit,
+                        config=config,
+                    )
             except ValueError:
                 ranked = []
             per_query.append(score_query(ranked, q["relevant"], k_values))
@@ -131,8 +152,12 @@ def run_search(
             query_limit=query_limit,
         )
     if dataset == "personal":
-        return _run_personal(modes=modes, k_values=k_values, limit=limit, query_limit=query_limit)
-    print(f"Unknown dataset: {dataset!r}. Use beir:<name> or personal.", file=sys.stderr)
+        return _run_personal(
+            modes=modes, k_values=k_values, limit=limit, query_limit=query_limit
+        )
+    print(
+        f"Unknown dataset: {dataset!r}. Use beir:<name> or personal.", file=sys.stderr
+    )
     return 1
 
 
@@ -168,7 +193,9 @@ def _run_beir(
             vault_dir, corpus, url_prefix=f"urn:beir:{dataset_name}"
         )
         stem_to_id = {stem: doc_id for doc_id, stem in doc_id_to_stem.items()}
-        id_for_path: Callable[[Path], str | None] = lambda p: stem_to_id.get(p.stem)
+
+        def id_for_path(path: Path) -> str | None:
+            return stem_to_id.get(path.stem)
 
         print("Building BM25 index ...")
         docs = collect_search_documents(bookmarks_dir=vault_dir)
@@ -216,14 +243,20 @@ def _run_personal(
     limit: int,
     query_limit: int | None,
 ) -> int:
-    from bookmark_tools.paths import get_search_index_path, load_env, require_bookmarks_dir
+    from bookmark_tools.paths import (
+        get_search_index_path,
+        load_env,
+        require_bookmarks_dir,
+    )
     from bookmark_tools.search_documents import collect_search_documents
     from bookmark_tools.search_index import update_search_index
 
     from evals.datasets.personal.schema import validate
     from evals.reporter import _git_info, print_metrics_table, write_snapshot
 
-    queries_path = Path(__file__).parent.parent / "datasets" / "personal" / "queries.yaml"
+    queries_path = (
+        Path(__file__).parent.parent / "datasets" / "personal" / "queries.yaml"
+    )
 
     load_env()
     bookmarks_dir = require_bookmarks_dir()
@@ -254,8 +287,12 @@ def _run_personal(
         return 1
 
     # Build {str(path) → note_id} for result lookup
-    path_to_id: dict[str, str] = {str(path): note_id for note_id, path in vault_id_map.items()}
-    id_for_path: Callable[[Path], str | None] = lambda p: path_to_id.get(str(p))
+    path_to_id: dict[str, str] = {
+        str(path): note_id for note_id, path in vault_id_map.items()
+    }
+
+    def id_for_path(path: Path) -> str | None:
+        return path_to_id.get(str(path))
 
     print("Refreshing search index (incremental) ...")
     docs = collect_search_documents(bookmarks_dir=bookmarks_dir)
@@ -269,8 +306,7 @@ def _run_personal(
 
     # Normalise to shared format
     normalised = [
-        {"text": q.query, "relevant": q.relevant_ids}
-        for q in personal_queries
+        {"text": q.query, "relevant": q.relevant_ids} for q in personal_queries
     ]
     metrics_by_mode = _score_queries(
         normalised,

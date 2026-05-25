@@ -3,7 +3,13 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-import yaml
+from evals.datasets.schema_utils import (
+    as_string_list,
+    ensure_mapping,
+    load_yaml,
+    optional_text,
+    required_text,
+)
 
 
 @dataclass(frozen=True)
@@ -34,7 +40,7 @@ def build_vault_id_map(bookmarks_dir: Path) -> dict[str, Path]:
 
 def load_queries(queries_path: Path) -> list[dict]:
     """Load and lightly validate raw YAML entries from queries.yaml."""
-    raw = yaml.safe_load(queries_path.read_text(encoding="utf-8"))
+    raw = load_yaml(queries_path)
     if raw is None:
         return []
     if not isinstance(raw, list):
@@ -61,22 +67,15 @@ def validate(
 
     queries: list[PersonalQuery] = []
     for i, entry in enumerate(raw_entries):
-        if not isinstance(entry, dict):
-            raise ValueError(f"{queries_path} entry {i}: must be a YAML mapping, got {type(entry).__name__}")
-
-        query_text = str(entry.get("query", "")).strip()
-        if not query_text:
-            raise ValueError(f"{queries_path} entry {i}: missing required 'query' field")
-
-        raw_ids = entry.get("relevant_ids", [])
-        if not isinstance(raw_ids, list):
-            raise ValueError(f"{queries_path} entry {i}: 'relevant_ids' must be a list")
+        context = f"{queries_path} entry {i}"
+        entry = ensure_mapping(entry, context=context)
+        query_text = required_text(entry, "query", context=context)
+        raw_ids = as_string_list(
+            entry.get("relevant_ids", []), context=f"{context}.relevant_ids"
+        )
 
         relevant_ids: list[str] = []
-        for j, rid in enumerate(raw_ids):
-            rid_str = str(rid).strip()
-            if not rid_str:
-                raise ValueError(f"{queries_path} entry {i}, relevant_ids[{j}]: empty ID")
+        for j, rid_str in enumerate(raw_ids):
             if rid_str not in vault_id_map:
                 raise ValueError(
                     f"{queries_path} entry {i}, relevant_ids[{j}]: "
@@ -85,10 +84,8 @@ def validate(
                 )
             relevant_ids.append(rid_str)
 
-        mode_hint_raw = entry.get("mode_hint")
-        mode_hint = str(mode_hint_raw).strip() if mode_hint_raw else None
-        notes_raw = entry.get("notes")
-        notes = str(notes_raw).strip() if notes_raw else None
+        mode_hint = optional_text(entry, "mode_hint") or None
+        notes = optional_text(entry, "notes") or None
 
         queries.append(
             PersonalQuery(

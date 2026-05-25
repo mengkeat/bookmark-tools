@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-import hashlib
-import re
 import sys
 import tempfile
 from contextlib import ExitStack
 from pathlib import Path
 from typing import Any
+
+from bookmark_tools.tag_normalize import normalize_tags
 
 from evals.datasets.classification.schema import (
     ClassificationCase,
@@ -14,9 +14,17 @@ from evals.datasets.classification.schema import (
     ProfileNoteSeed,
     load_dataset,
 )
+from evals.utils import folder_ancestors, safe_filename_stem
 
 DEFAULT_FIXTURES_PATH = (
     Path(__file__).parent.parent / "datasets" / "classification" / "fixtures.yaml"
+)
+CLASSIFICATION_METRIC_KEYS = (
+    "folder_accuracy",
+    "type_accuracy",
+    "tag_precision",
+    "tag_recall",
+    "tag_f1",
 )
 
 
@@ -53,28 +61,16 @@ def aggregate_classification_metrics(
     """Macro-average classification scores."""
     if not scores:
         return {}
-    keys = scores[0].keys()
     n = len(scores)
-    return {key: sum(score[key] for score in scores) / n for key in keys}
+    return {
+        key: sum(score[key] for score in scores) / n
+        for key in CLASSIFICATION_METRIC_KEYS
+    }
 
 
-def print_classification_metrics(metrics: dict[str, float]) -> None:
-    """Print a compact classification metric table."""
-    if not metrics:
-        print("No metrics.")
-        return
-    metric_col = max(len(key) for key in metrics) + 2
-    print("metric".ljust(metric_col) + "value")
-    print("-" * (metric_col + 8))
-    for key, value in metrics.items():
-        print(f"{key.ljust(metric_col)}{value:.4f}")
-
-
-def _safe_stem(text: str) -> str:
-    stem = re.sub(r"[^A-Za-z0-9._-]+", "-", text.strip()).strip("-").lower()
-    if not stem:
-        stem = hashlib.sha256(text.encode("utf-8")).hexdigest()[:16]
-    return stem[:120]
+def zero_classification_scores() -> dict[str, float]:
+    """Return a zeroed score mapping for failed classification cases."""
+    return dict.fromkeys(CLASSIFICATION_METRIC_KEYS, 0.0)
 
 
 def _write_seed_note(bookmarks_dir: Path, note: ProfileNoteSeed, index: int) -> None:
@@ -83,7 +79,7 @@ def _write_seed_note(bookmarks_dir: Path, note: ProfileNoteSeed, index: int) -> 
     folder = note.folder.strip("/") or "Development"
     folder_path = bookmarks_dir / folder
     folder_path.mkdir(parents=True, exist_ok=True)
-    note_path = folder_path / f"{_safe_stem(note.title) or f'profile-{index}'}.md"
+    note_path = folder_path / f"{safe_filename_stem(note.title)}-{index}.md"
     tags = "[" + ", ".join(note.tags) + "]"
     note_path.write_text(
         "\n".join(
@@ -108,11 +104,6 @@ def _write_seed_note(bookmarks_dir: Path, note: ProfileNoteSeed, index: int) -> 
     )
 
 
-def _folder_parts(folder: str) -> list[str]:
-    parts = [part for part in folder.strip("/").split("/") if part]
-    return ["/".join(parts[: index + 1]) for index in range(len(parts))]
-
-
 def _build_synthetic_profile(
     bookmarks_dir: Path,
     dataset: ClassificationDataset,
@@ -120,15 +111,15 @@ def _build_synthetic_profile(
 ) -> None:
     folders: set[str] = {"Development"}
     for folder in dataset.profile_folders:
-        folders.update(_folder_parts(folder))
+        folders.update(folder_ancestors(folder))
     for note in dataset.profile_notes:
-        folders.update(_folder_parts(note.folder))
+        folders.update(folder_ancestors(note.folder))
     for case in cases:
-        folders.update(_folder_parts(case.expected_folder))
+        folders.update(folder_ancestors(case.expected_folder))
         for folder in case.profile_folders:
-            folders.update(_folder_parts(folder))
+            folders.update(folder_ancestors(folder))
         for note in case.profile_notes:
-            folders.update(_folder_parts(note.folder))
+            folders.update(folder_ancestors(note.folder))
 
     bookmarks_dir.mkdir(parents=True, exist_ok=True)
     for folder in folders:
@@ -209,7 +200,7 @@ def _classify_case(
         similar_notes,
         used_llm_classification=llm_metadata is not None,
     )
-    predicted_tags = {str(tag).lower() for tag in normalized["tags"]}
+    predicted_tags = set(normalize_tags([str(tag) for tag in normalized["tags"]]))
     expected_tags = set(case.expected_tags)
     score = score_classification_prediction(
         predicted_folder=normalized["folder"],
@@ -249,7 +240,7 @@ def run_classification(
     from bookmark_tools.note_schema import CLASSIFICATION_PROMPT_VERSION
     from bookmark_tools.vault_profile import collect_existing_notes
 
-    from evals.reporter import _git_info, write_snapshot
+    from evals.reporter import _git_info, print_metric_values, write_snapshot
 
     fixtures_path = fixtures_path or DEFAULT_FIXTURES_PATH
     try:
@@ -301,13 +292,7 @@ def run_classification(
                     "predicted": None,
                     "used_llm": False,
                     "error": f"{exc.__class__.__name__}: {exc}",
-                    "scores": {
-                        "folder_accuracy": 0.0,
-                        "type_accuracy": 0.0,
-                        "tag_precision": 0.0,
-                        "tag_recall": 0.0,
-                        "tag_f1": 0.0,
-                    },
+                    "scores": zero_classification_scores(),
                 }
             case_results.append(result)
             predicted = result.get("predicted") or {}
@@ -321,7 +306,7 @@ def run_classification(
 
     metrics = aggregate_classification_metrics([r["scores"] for r in case_results])
     print()
-    print_classification_metrics(metrics)
+    print_metric_values(metrics)
 
     config = load_config()
     payload: dict[str, Any] = {

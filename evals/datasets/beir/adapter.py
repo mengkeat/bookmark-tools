@@ -11,8 +11,11 @@ BEIR_BASE_URL = "https://public.ukp.informatik.tu-darmstadt.de/thakur/BEIR/datas
 
 _xdg = os.environ.get("XDG_CACHE_HOME", "").strip()
 CACHE_DIR = (
-    Path(_xdg) if _xdg else Path.home() / ".cache"
-) / "bookmark-tools" / "evals" / "beir"
+    (Path(_xdg) if _xdg else Path.home() / ".cache")
+    / "bookmark-tools"
+    / "evals"
+    / "beir"
+)
 
 # Supported datasets: name → {download url, qrels split}
 DATASET_INFO: dict[str, dict[str, str]] = {

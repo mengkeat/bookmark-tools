@@ -38,6 +38,18 @@ def write_snapshot(
     return path
 
 
+def print_metric_values(metrics: dict[str, float]) -> None:
+    """Print a simple two-column metric/value table."""
+    if not metrics:
+        print("No metrics.")
+        return
+    metric_col = max(len(key) for key in metrics) + 2
+    print("metric".ljust(metric_col) + "value")
+    print("-" * (metric_col + 8))
+    for key, value in metrics.items():
+        print(f"{key.ljust(metric_col)}{value:.4f}")
+
+
 def print_metrics_table(
     metrics_by_mode: dict[str, dict[str, float]],
     k_values: list[int],
@@ -54,8 +66,10 @@ def print_metrics_table(
     print(header)
     print("-" * len(header))
     for mode, m in metrics_by_mode.items():
-        row = mode.ljust(col) + "  " + "  ".join(
-            f"{m.get(key, 0.0):.4f}".ljust(col) for key in metric_keys
+        row = (
+            mode.ljust(col)
+            + "  "
+            + "  ".join(f"{m.get(key, 0.0):.4f}".ljust(col) for key in metric_keys)
         )
         print(row)
 
@@ -79,8 +93,9 @@ def diff_snapshots(baseline: Path, current: Path) -> None:
     for mode in all_modes:
         a_m = a_modes.get(mode, {})
         b_m = b_modes.get(mode, {})
-        parts = [
-            f"{'+'if (b_m.get(k,0.0)-a_m.get(k,0.0))>=0 else ''}{b_m.get(k,0.0)-a_m.get(k,0.0):.4f}".ljust(col)
-            for k in all_keys
-        ]
+        parts = []
+        for key in all_keys:
+            delta = b_m.get(key, 0.0) - a_m.get(key, 0.0)
+            sign = "+" if delta >= 0 else ""
+            parts.append(f"{sign}{delta:.4f}".ljust(col))
         print(mode.ljust(col) + "  " + "  ".join(parts))

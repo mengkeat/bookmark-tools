@@ -1,21 +1,27 @@
 from __future__ import annotations
 
 import os
-import re
 import sys
 import tempfile
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Iterator
 
+from bookmark_tools.tag_normalize import normalize_tags
+
 from evals.datasets.e2e.schema import E2ECase, load_dataset
 from evals.runners.classification import (
     aggregate_classification_metrics,
-    print_classification_metrics,
     score_classification_prediction,
+    zero_classification_scores,
 )
+from evals.utils import folder_ancestors, safe_filename_stem
 
 DEFAULT_CASES_PATH = Path(__file__).parent.parent / "datasets" / "e2e" / "cases.yaml"
+
+
+def _return_none(*_args: object, **_kwargs: object) -> None:
+    return None
 
 
 @contextmanager
@@ -45,9 +51,9 @@ def _forced_heuristic_pipeline(enabled: bool) -> Iterator[None]:
     old_call_llm = cli_module.call_llm
     old_summarize_with_tool = summarize_module.summarize_with_tool
     old_summarize_with_llm = summarize_module.summarize_with_llm
-    cli_module.call_llm = lambda *args, **kwargs: None
-    summarize_module.summarize_with_tool = lambda *args, **kwargs: None
-    summarize_module.summarize_with_llm = lambda *args, **kwargs: None
+    cli_module.call_llm = _return_none
+    summarize_module.summarize_with_tool = _return_none
+    summarize_module.summarize_with_llm = _return_none
     try:
         yield
     finally:
@@ -56,20 +62,10 @@ def _forced_heuristic_pipeline(enabled: bool) -> Iterator[None]:
         summarize_module.summarize_with_llm = old_summarize_with_llm
 
 
-def _safe_filename(case_id: str) -> str:
-    safe = re.sub(r"[^A-Za-z0-9._-]+", "-", case_id.strip()).strip("-")
-    return (safe or "case")[:120]
-
-
-def _folder_parts(folder: str) -> list[str]:
-    parts = [part for part in folder.strip("/").split("/") if part]
-    return ["/".join(parts[: index + 1]) for index in range(len(parts))]
-
-
 def _prepare_bookmark_folders(bookmarks_dir: Path, cases: list[E2ECase]) -> None:
     folders = {"Development"}
     for case in cases:
-        folders.update(_folder_parts(case.expected_folder))
+        folders.update(folder_ancestors(case.expected_folder))
     bookmarks_dir.mkdir(parents=True, exist_ok=True)
     for folder in folders:
         (bookmarks_dir / folder).mkdir(parents=True, exist_ok=True)
@@ -77,7 +73,7 @@ def _prepare_bookmark_folders(bookmarks_dir: Path, cases: list[E2ECase]) -> None
 
 def _materialize_html_source(case: E2ECase, sources_dir: Path) -> str:
     sources_dir.mkdir(parents=True, exist_ok=True)
-    path = sources_dir / f"{_safe_filename(case.case_id)}.html"
+    path = sources_dir / f"{safe_filename_stem(case.case_id)}.html"
     path.write_text(case.html, encoding="utf-8")
     return path.resolve().as_uri()
 
@@ -109,7 +105,9 @@ def _ingest_case(
     predicted_folder = "" if predicted_folder == "." else predicted_folder
     raw_tags = note.frontmatter.get("tags", [])
     predicted_tags = (
-        {str(tag).lower() for tag in raw_tags} if isinstance(raw_tags, list) else set()
+        set(normalize_tags([str(tag) for tag in raw_tags]))
+        if isinstance(raw_tags, list)
+        else set()
     )
     predicted_type = str(note.frontmatter.get("type", "")).strip().lower()
     classification_scores = score_classification_prediction(
@@ -207,17 +205,6 @@ def _run_retrieval_checks(
     return metrics, checks
 
 
-def _print_retrieval_metrics(metrics: dict[str, float]) -> None:
-    if not metrics:
-        print("No retrieval metrics.")
-        return
-    metric_col = max(len(key) for key in metrics) + 2
-    print("metric".ljust(metric_col) + "value")
-    print("-" * (metric_col + 8))
-    for key, value in metrics.items():
-        print(f"{key.ljust(metric_col)}{value:.4f}")
-
-
 def run_e2e(
     *,
     cases_path: Path | None = None,
@@ -228,7 +215,7 @@ def run_e2e(
     from bookmark_tools.config import load_config
     from bookmark_tools.note_schema import CLASSIFICATION_PROMPT_VERSION
 
-    from evals.reporter import _git_info, write_snapshot
+    from evals.reporter import _git_info, print_metric_values, write_snapshot
 
     cases_path = cases_path or DEFAULT_CASES_PATH
     try:
@@ -275,13 +262,7 @@ def run_e2e(
                         },
                         "predicted": None,
                         "error": f"{exc.__class__.__name__}: {exc}",
-                        "classification_scores": {
-                            "folder_accuracy": 0.0,
-                            "type_accuracy": 0.0,
-                            "tag_precision": 0.0,
-                            "tag_recall": 0.0,
-                            "tag_f1": 0.0,
-                        },
+                        "classification_scores": zero_classification_scores(),
                     }
                 case_results.append(result)
                 predicted = result.get("predicted") or {}
@@ -303,9 +284,9 @@ def run_e2e(
         [result["classification_scores"] for result in case_results]
     )
     print("\n[classification]")
-    print_classification_metrics(classification_metrics)
+    print_metric_values(classification_metrics)
     print("\n[retrieval]")
-    _print_retrieval_metrics(retrieval_metrics)
+    print_metric_values(retrieval_metrics)
 
     config = load_config()
     payload: dict[str, Any] = {
