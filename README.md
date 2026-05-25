@@ -21,6 +21,7 @@ CLI tools for fetching, classifying, summarizing, and searching bookmarks in an 
 - **Related-topic metadata**: Populate `related` and `parent_topic` fields from LLM or heuristic signals.
 - **Schema validation**: `validate_schema_v1()` checks required fields, stable ID format, URL validity, domain consistency, and timestamp formats — ready for `bookmark-doctor` health checks.
 - **Small dependency set**: Core tooling is mostly stdlib; Flask powers the web UI and NumPy accelerates vector similarity.
+- **Retrieval benchmarking**: `bookmark-eval` measures BM25 / semantic / hybrid search quality against public BEIR datasets and a personal hand-labeled query set, so ranking and indexing changes are provably improvements.
 
 ## Installation
 
@@ -328,6 +329,99 @@ uv run ruff check bookmark_tools tests   # Lint
 uv run ruff format bookmark_tools tests  # Format
 ```
 
+### Retrieval benchmarking
+
+`bookmark-eval` measures search quality so changes to indexing, chunking, or ranking are provably improvements rather than guesses.
+
+```bash
+# Quick BM25 smoke-test against a public dataset (downloads nfcorpus ~27 MB on first run)
+uv run bookmark-eval run search --dataset beir:nfcorpus --mode bm25 --query-limit 20
+
+# Full public-dataset run (323 queries, ~1 min, BM25 only)
+uv run bookmark-eval run search --dataset beir:nfcorpus --mode bm25
+
+# With semantic and hybrid modes (requires API key)
+uv run bookmark-eval run search --dataset beir:nfcorpus
+
+# Run against your own vault (requires populated personal set — see below)
+uv run bookmark-eval run search --dataset personal
+
+# Compare two snapshots to see metric changes
+uv run bookmark-eval diff evals/results/baseline/snap-a.json evals/results/20260525T135928Z__search-beir-nfcorpus.json
+
+# List available suites
+uv run bookmark-eval list-suites
+```
+
+Output is a table of P@5, Recall@5, MRR, and nDCG@5/10 per search mode, plus a JSON snapshot saved under `evals/results/`.
+
+#### Populating the personal query set
+
+The personal dataset (`evals/datasets/personal/queries.yaml`) benchmarks against queries you actually type for bookmarks you actually have — the most realistic signal for your vault.
+
+**Step 1 — Find a note's stable ID.**
+
+Every bookmark note has an `id:` field in its frontmatter: a 64-character SHA-256 of its canonical URL that stays stable across renames and folder reorganizations.
+
+```bash
+# Read the ID directly from a note file
+grep "^id:" "/path/to/your/vault/Bookmarks/Tech/some-article.md"
+
+# Or find the path first via search, then read the ID
+uv run bookmark-search "sqlite full text search" --format json | \
+  python -c "import sys,json; [print(r['path']) for r in json.load(sys.stdin)]"
+# → /path/to/vault/Bookmarks/Dev/sqlite-fts5-guide.md
+grep "^id:" "/path/to/vault/Bookmarks/Dev/sqlite-fts5-guide.md"
+# → id: 4a8f2c1e3b7d9f2a...
+```
+
+**Step 2 — Add entries to `queries.yaml`.**
+
+```yaml
+# evals/datasets/personal/queries.yaml
+
+- query: "sqlite full text search python"
+  relevant_ids:
+    - 4a8f2c1e3b7d9f2a...   # 64-char hex from step 1
+  mode_hint: bm25
+  notes: FTS5 tutorial from sqlite.org docs — keyword query, BM25 should win
+
+- query: "managing attention deep work focus"
+  relevant_ids:
+    - b91d3f7a6e2c8d1f...
+    - c23e5b8d4a9f7e0b...
+  mode_hint: semantic
+  notes: Two essays on deep work — semantic should surface both even without exact terms
+
+- query: "vector embeddings cosine similarity approximate search"
+  relevant_ids:
+    - 7f4c9a2b1d8e3c5a...
+  mode_hint: hybrid
+```
+
+**Step 3 — Validate and run.**
+
+```bash
+# Validation catches stale IDs (e.g. after a bookmark was deleted)
+uv run bookmark-eval run search --dataset personal --mode bm25
+```
+
+The validator scans your vault for each `relevant_ids` entry and exits with a clear error and a `grep` hint if any ID is missing:
+
+```
+Error: evals/datasets/personal/queries.yaml entry 0, relevant_ids[0]:
+  ID 'deadbeef...' not found in vault.
+  Run: grep -r 'id: deadbeef...' "$BOOKMARKS_DIR"
+```
+
+**Tips for a useful personal set:**
+
+- **30–50 queries** is enough for stable numbers; focus on coverage across topic areas.
+- **Mix specificity** — include precise recall queries ("that Cloudflare post about DNS TTLs") and broader conceptual queries ("content delivery edge caching").
+- **Label mode hints** — queries where you expect semantic to outperform BM25 (e.g. synonyms, concepts) are the most valuable ablation points.
+- **IDs are reorg-stable** — they are SHA-256 of the canonical URL, so `bookmark-reorg` changing folder structure does not invalidate your query set.
+- **Commit a baseline snapshot** once you have a set you're happy with: copy a `evals/results/<timestamp>__search-personal.json` to `evals/results/baseline/` and commit it. Future runs can be diffed against it with `bookmark-eval diff`.
+
 ## Project structure
 
 - `AGENTS.md` — Detailed code structure and module documentation for coding agents
@@ -344,3 +438,7 @@ uv run ruff format bookmark_tools tests  # Format
 - `bookmark_tools/note_filter.py` — Bookmark vs sidecar/non-bookmark filtering for vault scans
 - `bookmark_tools/url_normalize.py` — URL identity and canonicalization
 - `tests/` — Unit and integration tests (320 tests across 23 files)
+- `evals/` — Retrieval benchmark suite (`bookmark-eval` CLI)
+- `evals/datasets/beir/` — BEIR public dataset adapter (nfcorpus, scifact)
+- `evals/datasets/personal/queries.yaml` — Hand-labeled personal query set; populate to benchmark against your vault
+- `evals/results/baseline/` — Committed metric snapshots for regression detection
