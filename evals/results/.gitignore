@@ -1,0 +1,3 @@
+# Ignore generated snapshots; commit baselines manually under baseline/
+*.json
+!baseline/*.json
