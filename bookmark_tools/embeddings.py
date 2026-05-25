@@ -203,14 +203,6 @@ def _load_stored_metadata(
     }
 
 
-def _load_stored_mtimes(connection: sqlite3.Connection) -> dict[str, float]:
-    """Load path → mtime from the embedding table."""
-    return {
-        path: metadata[0]
-        for path, metadata in _load_stored_metadata(connection).items()
-    }
-
-
 def _delete_by_paths(connection: sqlite3.Connection, paths: set[str]) -> None:
     """Remove embedding rows by path."""
     for path in paths:
