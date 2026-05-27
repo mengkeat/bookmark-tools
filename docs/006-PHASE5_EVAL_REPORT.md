@@ -2,7 +2,7 @@
 
 **Date:** 2026-05-27  
 **Phase under review:** Phase 5 — Chunked search and ranking improvements  
-**Compared against:** `docs/BENCHMARK-RESULTS.md` / pre-Phase-5 snapshots from `20260527T1003xxZ`  
+**Compared against:** `docs/005-BENCHMARK-RESULTS.md` / pre-Phase-5 snapshots from `20260527T1003xxZ`  
 **Current code snapshot:** `21b6775acf19` (`docs(search): document chunked retrieval`) with uncommitted report/plan edits  
 **Previous code snapshot:** `e2a10e84fabb` with pre-Phase-5 retrieval behavior  
 **Python:** 3.13.4  

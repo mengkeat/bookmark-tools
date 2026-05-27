@@ -111,7 +111,7 @@ Embedding rows now store:
 - `bookmark_tools/embeddings.py` — model/dimension metadata, mismatch handling, full rebuild helper
 - `pyproject.toml` — new scripts: `bookmark-rebuild`, `bookmark-doctor`
 - `README.md` — usage docs for doctor/rebuild
-- `docs/SYSTEM_OF_RECORD.md` — derived-state and doctor/rebuild contract
+- `docs/000-SYSTEM_OF_RECORD.md` — derived-state and doctor/rebuild contract
 
 ---
 

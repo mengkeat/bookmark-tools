@@ -24,7 +24,7 @@ This document describes the concrete changes delivered in Phase 0. The goal was 
 
 | # | Deliverable | Status |
 |---|---|---|
-| 1 | System-of-record document (`docs/SYSTEM_OF_RECORD.md`) | ✅ Done |
+| 1 | System-of-record document (`docs/000-SYSTEM_OF_RECORD.md`) | ✅ Done |
 | 2 | Fail-fast validation when `VAULT_PATH`/`BOOKMARKS_DIR` is missing or invalid | ✅ Done |
 | 3 | Archive sidecar (`*.content.md`) exclusion from all bookmark scans | ✅ Done |
 | 4 | README reconciled with actual code behavior | ✅ Done |
@@ -37,7 +37,7 @@ This document describes the concrete changes delivered in Phase 0. The goal was 
 
 ## 1. System-of-record contract
 
-**New file:** `docs/SYSTEM_OF_RECORD.md`
+**New file:** `docs/000-SYSTEM_OF_RECORD.md`
 
 Before Phase 0, Markdown notes appeared to be canonical, but this was never documented or enforced. This created ambiguity about whether the SQLite search database, embeddings, or archive files were authoritative when they diverged from notes.
 
@@ -354,8 +354,8 @@ All tests use `unittest` with `unittest.mock` for environment variable isolation
 
 | File | Purpose |
 |---|---|
-| `docs/SYSTEM_OF_RECORD.md` | Defines canonical vs. derived vs. cache data categories and invariants |
-| `docs/PHASE0_CHANGES.md` | This document |
+| `docs/000-SYSTEM_OF_RECORD.md` | Defines canonical vs. derived vs. cache data categories and invariants |
+| `docs/001-PHASE0_CHANGES.md` | This document |
 | `bookmark_tools/note_filter.py` | `is_archive_sidecar()` and `iter_bookmark_note_paths()` for vault scan hygiene |
 | `bookmark_tools/url_normalize.py` | `normalize_url()` for conservative URL identity comparison |
 | `tests/test_note_filter.py` | 12 tests for archive sidecar detection and bookmark path iteration |

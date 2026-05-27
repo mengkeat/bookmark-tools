@@ -4,7 +4,7 @@ CLI tools for fetching, classifying, summarizing, and searching bookmarks in an 
 
 ## Features
 
-- **Schema v1 bookmark notes**: Self-describing notes with stable IDs, fetch metadata, content hashes, canonical URLs, and source provenance. See `docs/SYSTEM_OF_RECORD.md` for the full schema.
+- **Schema v1 bookmark notes**: Self-describing notes with stable IDs, fetch metadata, content hashes, canonical URLs, and source provenance. See `docs/000-SYSTEM_OF_RECORD.md` for the full schema.
 - **Bookmark creation**: Fetch a web page, classify it with LLM (or heuristic fallback), generate a summary, and write a structured markdown note to your vault.
 - **Batch import**: Import multiple URLs from a file or stdin with `--file`/`-f`. Source file and line number are recorded for provenance.
 - **Interactive mode**: Review and confirm classification before writing with `--interactive`/`-i`.
@@ -261,7 +261,7 @@ When you run `uv run bookmark <URL>`, the tool:
 4. Generates a summary via the `summarize` CLI, classifier output, LLM, or heuristic fallback
 5. Writes a structured markdown note with YAML frontmatter to your vault
 
-Bookmark Markdown notes are the canonical system of record; search indexes, embeddings, and archive sidecars are derived/cache data. Use `bookmark-rebuild` to recreate derived search/embedding state and `bookmark-doctor` to detect drift. See `docs/SYSTEM_OF_RECORD.md`.
+Bookmark Markdown notes are the canonical system of record; search indexes, embeddings, and archive sidecars are derived/cache data. Use `bookmark-rebuild` to recreate derived search/embedding state and `bookmark-doctor` to detect drift. See `docs/000-SYSTEM_OF_RECORD.md`.
 
 ### Summary fallback chain
 
@@ -429,11 +429,11 @@ Error: evals/datasets/personal/queries.yaml entry 0, relevant_ids[0]:
 ## Project structure
 
 - `AGENTS.md` — Detailed code structure and module documentation for coding agents
-- `docs/SYSTEM_OF_RECORD.md` — Defines canonical vs derived data categories
-- `docs/PHASE0_CHANGES.md` — Phase 0 implementation details
-- `docs/PHASE1B_CHANGES.md` — Phase 1B schema hardening details
-- `docs/PHASE2_CHANGES.md` — Phase 2 doctor/rebuild implementation details
-- `docs/PHASE3_CHANGES.md` — Phase 3 provider/config discipline details
+- `docs/000-SYSTEM_OF_RECORD.md` — Defines canonical vs derived data categories
+- `docs/001-PHASE0_CHANGES.md` — Phase 0 implementation details
+- `docs/002-PHASE1B_CHANGES.md` — Phase 1B schema hardening details
+- `docs/003-PHASE2_CHANGES.md` — Phase 2 doctor/rebuild implementation details
+- `docs/004-PHASE3_CHANGES.md` — Phase 3 provider/config discipline details
 - `bookmark_tools/` — Main package source code
 - `bookmark_tools/config.py` — TOML/env/default provider, model, dimension, and timeout resolution
 - `bookmark_tools/doctor.py` — Vault health checks, JSON reports, and safe derived-state fixes
