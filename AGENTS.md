@@ -114,9 +114,10 @@ Invokes `bookmark_tools/__main__.py` → calls `cli.main()`.
 
 #### Bookmark search entry point
 ```
-uv run bookmark-search <QUERY> [--folder <FOLDER>] [--limit <N>] [--rebuild]
-uv run bookmark-search <QUERY> --semantic [--threshold <FLOAT>] [--limit <N>]
-uv run bookmark-search <QUERY> --hybrid [--threshold <FLOAT>] [--limit <N>]
+uv run bookmark-search <QUERY> [--folder <FOLDER>] [--tag <TAG>] [--limit <N>] [--rebuild]
+uv run bookmark-search <QUERY> --semantic [--threshold <FLOAT>] [--tag <TAG>] [--limit <N>]
+uv run bookmark-search <QUERY> --hybrid [--threshold <FLOAT>] [--tag <TAG>] [--limit <N>]
+uv run bookmark-search <QUERY> --show-chunks
 ```
 Uses the `bookmark-search` script entry point defined in `pyproject.toml`, which calls `bookmark_tools.search:main`.
 
@@ -124,6 +125,8 @@ Uses the `bookmark-search` script entry point defined in `pyproject.toml`, which
 |----------|----------|---------|-------------|
 | `<QUERY>` | Yes | — | Search query text |
 | `--folder` | No | None | Restrict results to a folder and its subfolders (e.g., `ML-AI`) |
+| `--tag` | No | None | Restrict results to bookmarks with the given tag |
+| `--show-chunks` | No | False | Return multiple matching chunks from the same bookmark instead of one best note result |
 | `--limit` | No | 10 | Maximum number of results to return (must be ≥ 1) |
 | `--rebuild` | No | False | Force a full FTS5 index rebuild instead of incremental update |
 | `--semantic` | No | False | Use embedding-based semantic search instead of keyword FTS5 search |
@@ -203,9 +206,10 @@ Start with rows marked **Mutable**. Most implementation changes should be confin
 | `bookmark_tools/__main__.py` | Package runner | Calls `cli.main()` | Read-Only |
 | `bookmark_tools/search.py` | Search orchestration: CLI argument parsing, BM25/semantic/hybrid search, result formatting, logging | `main()`, `search_bookmarks()`, `search_bookmarks_semantic()`, `search_bookmarks_hybrid()`, `_reciprocal_rank_fusion()`, `parse_args()`, `configure_logging()` | **Mutable** (business logic) |
 | `bookmark_tools/catalog.py` | Unified SQLite catalog: schema versioning, migrations, bookmarks metadata, fetch_log, stubs for chunks/edges/jobs, compatibility wrappers | `connect()`, `ensure_catalog_schema()`, `rebuild_catalog()`, `delete_from_catalog()`, `upsert_bookmark()`, `populate_bookmarks()`, `get_catalog_info()`, `CatalogResult`, `CatalogInfo` | Read-Only (utility) |
-| `bookmark_tools/search_index.py` | SQLite FTS5 index management: schema creation, BM25-weighted search, query sanitization | `rebuild_search_index()`, `update_search_index()`, `search_index()`, `SearchResult` | Read-Only (utility) |
-| `bookmark_tools/search_documents.py` | Document collection: reads vault notes and normalizes frontmatter + body into `SearchDocument` records | `collect_search_documents()`, `SearchDocument` | Read-Only (utility) |
-| `bookmark_tools/embeddings.py` | Embedding-based semantic search: OpenAI embedding API, vector storage in SQLite, cosine similarity ranking, retry support | `embed_texts()`, `build_embedding_text()`, `refresh_embeddings()`, `semantic_search()`, `EmbeddingMatch` | Read-Only (utility) |
+| `bookmark_tools/search_index.py` | SQLite FTS5 index management: schema creation, chunked BM25-weighted search, query sanitization | `rebuild_search_index()`, `update_search_index()`, `search_index()`, `SearchResult` | Read-Only (utility) |
+| `bookmark_tools/search_documents.py` | Document collection: reads vault notes and preserves body text for chunking in `SearchDocument` records | `collect_search_documents()`, `SearchDocument` | Read-Only (utility) |
+| `bookmark_tools/chunking.py` | Section-aware chunk generation for FTS, embeddings, and catalog chunk rows | `chunk_document()`, `chunk_documents()`, `SearchChunk` | Read-Only (utility) |
+| `bookmark_tools/embeddings.py` | Embedding-based semantic chunk search: OpenAI embedding API, vector storage in SQLite, cosine similarity ranking, retry support | `embed_texts()`, `build_embedding_chunk_text()`, `refresh_embeddings()`, `semantic_search()`, `EmbeddingMatch` | Read-Only (utility) |
 | `bookmark_tools/link.py` | Link management: URL validation, link extraction, and bookmark link operations | **Mutable** (business logic) |
 | `bookmark_tools/reorg.py` | Bookmark reorganization: folder restructuring, batch moves, vault reorganization | **Mutable** (business logic) |
 | `bookmark_tools/stats.py` | Bookmark statistics: analytics, metrics collection, vault statistics reporting | **Mutable** (business logic) |
@@ -282,7 +286,7 @@ tags: str              — Space-joined tag list
 related: str           — Space-joined related-note list
 parent_topic: str      — From frontmatter
 description: str       — From frontmatter
-body: str              — Markdown body text (below frontmatter), whitespace-collapsed
+body: str              — Markdown body text (below frontmatter), preserving headings for chunking
 ```
 
 #### `CatalogResult` (dataclass, frozen) — `catalog.py`
@@ -310,8 +314,19 @@ edge_count: int
 job_count: int
 ```
 
+#### `SearchChunk` (dataclass, frozen) — `chunking.py`
+A derived section/chunk record for one bookmark note.
+```
+path, url, title, folder, tags, related, parent_topic, description
+section: str           — Normalized section name (summary, key_ideas, notes, archive, etc.)
+chunk_index: int       — Per-note chunk ordinal
+chunk_text: str        — Normalized chunk text
+token_count: int       — Approximate token count
+text_hash: str         — SHA-256 hash of chunk text
+```
+
 #### `SearchResult` (dataclass, frozen) — `search_index.py`
-A single ranked hit returned by `search_index()`, also used as uniform output for semantic/hybrid search.
+A single ranked note or chunk hit returned by `search_index()`, also used as uniform output for semantic/hybrid search.
 ```
 path: Path             — Absolute path to the matched note
 url: str               — Bookmark URL
@@ -319,6 +334,9 @@ title: str             — Note title
 folder: str            — Folder under Bookmarks/
 description: str       — Note description
 score: float           — Relevance score (BM25, cosine similarity, or RRF fused score)
+snippet: str           — Matching chunk/body context snippet
+section: str           — Matching section name
+chunk_index: int       — Matching chunk ordinal
 ```
 
 #### `EmbeddingMatch` (dataclass, frozen) — `embeddings.py`
@@ -330,6 +348,9 @@ title: str             — Note title
 folder: str            — Folder under Bookmarks/
 description: str       — Note description
 similarity: float      — Cosine similarity score (0.0–1.0; filtered by threshold, default 0.40)
+snippet: str           — Matching chunk context
+section: str           — Matching section name
+chunk_index: int       — Matching chunk ordinal
 ```
 
 #### `page_data` (dict, ad hoc) — produced by `fetch.py:extract_page_data()`
@@ -387,7 +408,7 @@ title, url, type, tags, created, last_updated, language, related, parent_topic, 
 | Duplicate URL lookup | `BookmarkProfile.url_index` | `classify.py:find_existing_url(url, profile)` | Uses prebuilt map (fallback filesystem scan only when profile is not provided) |
 | Write new note | `$BOOKMARKS_DIR/<folder>/<slug>.md` | `cli.py:main()` | `mkdir -p` + `write_text()`; skipped in `--dry-run` mode |
 | Read notes for search indexing | `$BOOKMARKS_DIR/**/*.md` | `search_documents.py:collect_search_documents()` | Reads frontmatter + body; normalizes into `SearchDocument` records |
-| SQLite search database | Configured via `BOOKMARK_SEARCH_INDEX` | `catalog.py`, `search_index.py`, `embeddings.py` | Unified catalog DB: FTS5 virtual table for BM25 search + `embedding_store` for semantic vectors + `bookmarks` derived metadata + `fetch_log` + stubs for chunks/edges/jobs |
+| SQLite search database | Configured via `BOOKMARK_SEARCH_INDEX` | `catalog.py`, `search_index.py`, `embeddings.py`, `chunking.py` | Unified catalog DB: chunked FTS5 BM25 search + chunk-level `embedding_store` vectors + `bookmarks` derived metadata + `note_chunks` + `fetch_log` + stubs for edges/jobs |
 
 #### Environment Variables
 | Variable | Required | Default | Used In |

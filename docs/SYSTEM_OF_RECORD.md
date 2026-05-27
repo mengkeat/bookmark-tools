@@ -98,10 +98,10 @@ The SQLite search database (`BOOKMARK_SEARCH_INDEX`, defaulting under `$VAULT_PA
 The unified catalog (managed by `bookmark_tools/catalog.py`) consolidates:
 
 - **bookmarks** table: derived metadata (id, URLs, domain, folder, title, content hash, full frontmatter JSON)
-- **FTS5** virtual table: full-text search over title, tags, folder, topic, description, body
-- **embedding_store** table: semantic search vectors with model/dimension tracking
+- **FTS5** virtual table: chunk-level full-text search over title, tags, folder, topic, description, and chunk body
+- **embedding_store** table: chunk-level semantic search vectors with model/dimension tracking
 - **fetch_log** table: fetch history for future recrawl/change detection
-- **note_chunks** table: stub for future chunk-level retrieval
+- **note_chunks** table: derived section/chunk records used by retrieval
 - **edges** table: stub for future graph/link support
 - **jobs** table: stub for future job/checkpoint tracking
 - **catalog_meta** table: schema version tracking

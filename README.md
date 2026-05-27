@@ -11,7 +11,7 @@ CLI tools for fetching, classifying, summarizing, and searching bookmarks in an 
 - **Content archiving**: Save a cleaned copy of page content alongside the bookmark with `--archive`; archive sidecars are ignored by bookmark scans and search indexing.
 - **Bookmark update**: Re-fetch and re-classify existing bookmarks with `bookmark-update`, preserving creation date, original URL, human notes, and unknown frontmatter. Supports `--all` and `--folder` for bulk updates.
 - **Bookmark deletion**: Delete bookmarks by URL or file path with `bookmark-delete`, cleaning up search index and embeddings.
-- **Search**: BM25 keyword search, semantic vector search, or hybrid search with context snippets. Filter by `--tag`, export as JSON/CSV.
+- **Search**: Chunked BM25 keyword search, semantic vector search, or hybrid search with section-aware snippets. Filter by `--tag`, export as JSON/CSV.
 - **Derived-state rebuilds**: Rebuild FTS search and embedding state from Markdown with `bookmark-rebuild`.
 - **Vault doctor**: Diagnose config, schema, duplicate URLs, archive references, search index state, embedding metadata, non-bookmark Markdown, and broken Obsidian links with `bookmark-doctor`.
 - **Link health checking**: Validate all bookmarked URLs with `bookmark-check` to find dead links.
@@ -138,11 +138,14 @@ After a batch run, any failed URLs are printed with their error reasons so you c
 # Keyword search (BM25)
 uv run bookmark-search <QUERY> [--folder <FOLDER>] [--tag <TAG>] [--limit <N>]
 
-# Semantic search (embeddings)
-uv run bookmark-search <QUERY> --semantic [--threshold <FLOAT>] [--limit <N>]
+# Semantic search (chunk embeddings)
+uv run bookmark-search <QUERY> --semantic [--threshold <FLOAT>] [--tag <TAG>] [--limit <N>]
 
 # Hybrid search (BM25 + semantic via Reciprocal Rank Fusion)
-uv run bookmark-search <QUERY> --hybrid [--threshold <FLOAT>] [--limit <N>]
+uv run bookmark-search <QUERY> --hybrid [--threshold <FLOAT>] [--tag <TAG>] [--limit <N>]
+
+# Show multiple matching chunks per bookmark instead of deduping by note
+uv run bookmark-search <QUERY> --show-chunks
 
 # Export results as JSON or CSV for scripting
 uv run bookmark-search <QUERY> --format json
@@ -154,6 +157,7 @@ uv run bookmark-search <QUERY> --format csv
 | `<QUERY>` | Search query text (required) |
 | `--folder` | Restrict to a folder and its subfolders (e.g., `ML-AI`) |
 | `--tag` | Restrict results to bookmarks with the given tag |
+| `--show-chunks` | Return multiple matching chunks from the same bookmark instead of one best note result |
 | `--limit` | Max results (default: 10) |
 | `--rebuild` | Force a full FTS5 index rebuild |
 | `--semantic` | Use embedding-based semantic search |
