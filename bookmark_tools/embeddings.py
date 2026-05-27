@@ -11,6 +11,7 @@ from .config import DEFAULT_EMBEDDING_DIMENSIONS, DEFAULT_EMBEDDING_MODEL
 from .http_retry import urlopen_with_retry
 from pathlib import Path
 
+from .chunking import SearchChunk, chunk_documents
 from .classify import get_llm_config
 from .paths import DEFAULT_TIMEOUT, get_search_index_path
 from .search_documents import SearchDocument
@@ -31,6 +32,9 @@ class EmbeddingMatch:
     folder: str
     description: str
     similarity: float
+    snippet: str = ""
+    section: str = ""
+    chunk_index: int = 0
 
 
 # ---------------------------------------------------------------------------
@@ -107,6 +111,20 @@ def build_embedding_text(document: SearchDocument) -> str:
     return " | ".join(part for part in parts if part)
 
 
+def build_embedding_chunk_text(chunk: SearchChunk) -> str:
+    """Concatenate chunk fields into a single string for embedding."""
+    parts = [
+        chunk.title,
+        chunk.folder,
+        chunk.tags,
+        chunk.parent_topic,
+        chunk.description,
+        chunk.section,
+        chunk.chunk_text,
+    ]
+    return " | ".join(part for part in parts if part)
+
+
 # ---------------------------------------------------------------------------
 # Vector serialization
 # ---------------------------------------------------------------------------
@@ -147,18 +165,26 @@ def _connect(database_path: Path) -> sqlite3.Connection:
 
 def _create_embedding_table(connection: sqlite3.Connection) -> None:
     """Create the embedding storage table if it does not exist."""
+    if _embedding_table_is_legacy(connection):
+        connection.execute(f"DROP TABLE IF EXISTS {EMBEDDING_TABLE}")
     connection.execute(
         f"""
         CREATE TABLE IF NOT EXISTS {EMBEDDING_TABLE} (
-            path TEXT PRIMARY KEY,
+            path TEXT NOT NULL,
+            chunk_index INTEGER NOT NULL DEFAULT 0,
             url TEXT NOT NULL DEFAULT '',
             title TEXT NOT NULL DEFAULT '',
             folder TEXT NOT NULL DEFAULT '',
+            tags TEXT NOT NULL DEFAULT '',
             description TEXT NOT NULL DEFAULT '',
+            section TEXT NOT NULL DEFAULT '',
+            chunk_text TEXT NOT NULL DEFAULT '',
             embedding BLOB NOT NULL,
             mtime REAL NOT NULL,
             model TEXT NOT NULL DEFAULT '',
-            dimensions INTEGER NOT NULL DEFAULT 0
+            dimensions INTEGER NOT NULL DEFAULT 0,
+            text_hash TEXT NOT NULL DEFAULT '',
+            PRIMARY KEY (path, chunk_index)
         )
         """
     )
@@ -187,19 +213,33 @@ def _ensure_embedding_metadata_columns(connection: sqlite3.Connection) -> None:
         )
 
 
+def _embedding_table_is_legacy(connection: sqlite3.Connection) -> bool:
+    """Return True when the derived embedding table predates chunk columns."""
+    columns = _table_columns(connection, EMBEDDING_TABLE)
+    if not columns:
+        return False
+    required = {"chunk_index", "tags", "section", "chunk_text", "text_hash"}
+    return not required.issubset(columns)
+
+
 def _load_stored_metadata(
     connection: sqlite3.Connection,
-) -> dict[str, tuple[float, str, int]]:
-    """Load path → (mtime, model, dimensions) from the embedding table."""
+) -> dict[tuple[str, int], tuple[float, str, int, str]]:
+    """Load chunk key → (mtime, model, dimensions, text_hash)."""
     try:
         _ensure_embedding_metadata_columns(connection)
         rows = connection.execute(
-            f"SELECT path, mtime, model, dimensions FROM {EMBEDDING_TABLE}"
+            f"SELECT path, chunk_index, mtime, model, dimensions, text_hash FROM {EMBEDDING_TABLE}"
         ).fetchall()
     except sqlite3.OperationalError:
         return {}
     return {
-        row["path"]: (float(row["mtime"]), str(row["model"]), int(row["dimensions"]))
+        (row["path"], int(row["chunk_index"])): (
+            float(row["mtime"]),
+            str(row["model"]),
+            int(row["dimensions"]),
+            str(row["text_hash"]),
+        )
         for row in rows
     }
 
@@ -208,6 +248,18 @@ def _delete_by_paths(connection: sqlite3.Connection, paths: set[str]) -> None:
     """Remove embedding rows by path."""
     for path in paths:
         connection.execute(f"DELETE FROM {EMBEDDING_TABLE} WHERE path = ?", (path,))
+
+
+def _delete_by_chunk_keys(
+    connection: sqlite3.Connection,
+    keys: set[tuple[str, int]],
+) -> None:
+    """Remove embedding rows by (path, chunk_index)."""
+    for path, chunk_index in keys:
+        connection.execute(
+            f"DELETE FROM {EMBEDDING_TABLE} WHERE path = ? AND chunk_index = ?",
+            (path, chunk_index),
+        )
 
 
 def delete_from_embedding_store(
@@ -232,7 +284,7 @@ def delete_from_embedding_store(
 
 def _insert_embeddings(
     connection: sqlite3.Connection,
-    documents: list[SearchDocument],
+    chunks: list[SearchChunk],
     embeddings: list[list[float]],
     *,
     model: str,
@@ -242,22 +294,28 @@ def _insert_embeddings(
     connection.executemany(
         f"""
         INSERT OR REPLACE INTO {EMBEDDING_TABLE}
-            (path, url, title, folder, description, embedding, mtime, model, dimensions)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            (path, chunk_index, url, title, folder, tags, description, section,
+             chunk_text, embedding, mtime, model, dimensions, text_hash)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         [
             (
-                str(doc.path),
-                doc.url,
-                doc.title,
-                doc.folder,
-                doc.description,
+                str(chunk.path),
+                chunk.chunk_index,
+                chunk.url,
+                chunk.title,
+                chunk.folder,
+                chunk.tags,
+                chunk.description,
+                chunk.section,
+                chunk.chunk_text,
                 _serialize_vector(_normalize_vector(emb)),
-                doc.path.stat().st_mtime,
+                chunk.path.stat().st_mtime,
                 model,
                 dimensions,
+                chunk.text_hash,
             )
-            for doc, emb in zip(documents, embeddings)
+            for chunk, emb in zip(chunks, embeddings)
         ],
     )
 
@@ -293,37 +351,41 @@ def refresh_embeddings(
         with connection:
             _create_embedding_table(connection)
 
+        chunks = chunk_documents(documents)
         stored_metadata = _load_stored_metadata(connection)
-        current_paths = {str(doc.path) for doc in documents}
+        current_keys = {(str(chunk.path), chunk.chunk_index) for chunk in chunks}
 
-        removed_paths = stored_metadata.keys() - current_paths
-        changed_documents: list[SearchDocument] = []
-        for document in documents:
-            path_str = str(document.path)
-            if path_str not in stored_metadata:
-                changed_documents.append(document)
+        removed_keys = stored_metadata.keys() - current_keys
+        changed_chunks: list[SearchChunk] = []
+        for chunk in chunks:
+            key = (str(chunk.path), chunk.chunk_index)
+            if key not in stored_metadata:
+                changed_chunks.append(chunk)
                 continue
-            stored_mtime, stored_model, stored_dimensions = stored_metadata[path_str]
+            stored_mtime, stored_model, stored_dimensions, stored_hash = (
+                stored_metadata[key]
+            )
             if (
-                document.path.stat().st_mtime != stored_mtime
+                chunk.path.stat().st_mtime != stored_mtime
                 or stored_model != model
                 or stored_dimensions != dimensions
+                or stored_hash != chunk.text_hash
             ):
-                changed_documents.append(document)
+                changed_chunks.append(chunk)
 
-        if not removed_paths and not changed_documents:
+        if not removed_keys and not changed_chunks:
             return
 
         with connection:
-            if removed_paths:
-                _delete_by_paths(connection, removed_paths)
+            if removed_keys:
+                _delete_by_chunk_keys(connection, removed_keys)
 
-            if changed_documents:
-                texts = [build_embedding_text(doc) for doc in changed_documents]
+            if changed_chunks:
+                texts = [build_embedding_chunk_text(chunk) for chunk in changed_chunks]
                 embeddings = embed_texts(texts, config)
                 _insert_embeddings(
                     connection,
-                    changed_documents,
+                    changed_chunks,
                     embeddings,
                     model=model,
                     dimensions=dimensions,
@@ -356,11 +418,12 @@ def rebuild_embeddings(
             connection.execute(f"DROP TABLE IF EXISTS {EMBEDDING_TABLE}")
             _create_embedding_table(connection)
             if documents:
-                texts = [build_embedding_text(doc) for doc in documents]
+                chunks = chunk_documents(documents)
+                texts = [build_embedding_chunk_text(chunk) for chunk in chunks]
                 embeddings = embed_texts(texts, config)
                 _insert_embeddings(
                     connection,
-                    documents,
+                    chunks,
                     embeddings,
                     model=model,
                     dimensions=dimensions,
@@ -401,10 +464,12 @@ def semantic_search(
     database_path: Path | None = None,
     config: dict[str, str] | None = None,
     folder: str | None = None,
+    tag: str | None = None,
     limit: int = 10,
     threshold: float = MIN_SIMILARITY_THRESHOLD,
+    show_chunks: bool = False,
 ) -> list[EmbeddingMatch]:
-    """Embed a query and return the most similar bookmarks by cosine similarity."""
+    """Embed a query and return the most similar bookmark chunks."""
     if database_path is None:
         database_path = get_search_index_path()
     if config is None:
@@ -424,15 +489,20 @@ def semantic_search(
     try:
         with connection:
             _create_embedding_table(connection)
-        where = ""
+        where_clauses: list[str] = []
         params: list[str] = []
         if normalized_folder:
-            where = "WHERE folder = ? OR folder LIKE ?"
-            params = [normalized_folder, f"{normalized_folder}/%"]
+            where_clauses.append("(folder = ? OR folder LIKE ?)")
+            params.extend([normalized_folder, f"{normalized_folder}/%"])
+        if tag:
+            where_clauses.append("tags LIKE ?")
+            params.append(f"%{tag.strip().lower()}%")
+        where = f"WHERE {' AND '.join(where_clauses)}" if where_clauses else ""
 
         rows = connection.execute(
             f"""
-            SELECT path, url, title, folder, description, embedding, model, dimensions
+            SELECT path, chunk_index, url, title, folder, description, section,
+                   chunk_text, embedding, model, dimensions
             FROM {EMBEDDING_TABLE}
             {where}
             """,
@@ -468,15 +538,29 @@ def semantic_search(
         reverse=True,
     )
 
-    return [
-        EmbeddingMatch(
-            path=Path(str(row["path"])),
-            url=str(row["url"]),
-            title=str(row["title"]),
-            folder=str(row["folder"]),
-            description=str(row["description"]),
-            similarity=round(similarity, 4),
+    matches: list[EmbeddingMatch] = []
+    seen_paths: set[Path] = set()
+    for row, similarity in scored:
+        if similarity < threshold:
+            continue
+        path = Path(str(row["path"]))
+        if not show_chunks and path in seen_paths:
+            continue
+        seen_paths.add(path)
+        chunk_text = str(row["chunk_text"] or "")
+        matches.append(
+            EmbeddingMatch(
+                path=path,
+                url=str(row["url"]),
+                title=str(row["title"]),
+                folder=str(row["folder"]),
+                description=str(row["description"]),
+                similarity=round(similarity, 4),
+                snippet=chunk_text[:240],
+                section=str(row["section"] or ""),
+                chunk_index=int(row["chunk_index"] or 0),
+            )
         )
-        for row, similarity in scored[:limit]
-        if similarity >= threshold
-    ]
+        if len(matches) >= limit:
+            break
+    return matches

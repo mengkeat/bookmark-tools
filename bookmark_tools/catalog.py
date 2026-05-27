@@ -232,15 +232,21 @@ def _create_embedding_table(connection: sqlite3.Connection) -> None:
     connection.execute(
         f"""
         CREATE TABLE IF NOT EXISTS {EMBEDDING_TABLE} (
-            path TEXT PRIMARY KEY,
+            path TEXT NOT NULL,
+            chunk_index INTEGER NOT NULL DEFAULT 0,
             url TEXT NOT NULL DEFAULT '',
             title TEXT NOT NULL DEFAULT '',
             folder TEXT NOT NULL DEFAULT '',
+            tags TEXT NOT NULL DEFAULT '',
             description TEXT NOT NULL DEFAULT '',
+            section TEXT NOT NULL DEFAULT '',
+            chunk_text TEXT NOT NULL DEFAULT '',
             embedding BLOB NOT NULL,
             mtime REAL NOT NULL,
             model TEXT NOT NULL DEFAULT '',
-            dimensions INTEGER NOT NULL DEFAULT 0
+            dimensions INTEGER NOT NULL DEFAULT 0,
+            text_hash TEXT NOT NULL DEFAULT '',
+            PRIMARY KEY (path, chunk_index)
         )
         """
     )

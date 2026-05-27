@@ -102,8 +102,10 @@ def search_bookmarks_semantic(
     bookmarks_dir: Path | None = None,
     database_path: Path | None = None,
     folder: str | None = None,
+    tag: str | None = None,
     limit: int = DEFAULT_SEARCH_LIMIT,
     threshold: float = DEFAULT_SIMILARITY_THRESHOLD,
+    show_chunks: bool = False,
 ) -> list[SearchResult]:
     """Refresh embeddings and return cosine-similarity-ranked search results."""
     from .embeddings import refresh_embeddings, semantic_search
@@ -118,8 +120,10 @@ def search_bookmarks_semantic(
         query,
         database_path=database_path,
         folder=folder,
+        tag=tag,
         limit=limit,
         threshold=threshold,
+        show_chunks=show_chunks,
     )
     return [_embedding_match_to_result(match) for match in matches]
 
@@ -147,6 +151,7 @@ def _reciprocal_rank_fusion(
     bm25_results: list[SearchResult],
     semantic_results: list[SearchResult],
     limit: int,
+    show_chunks: bool = False,
 ) -> list[SearchResult]:
     """Merge two ranked lists using Reciprocal Rank Fusion (RRF).
 
@@ -154,35 +159,39 @@ def _reciprocal_rank_fusion(
     it appears in.  Results are keyed by path so duplicates are merged.
     The combined ``SearchResult.score`` is the fused RRF score.
     """
-    scores: dict[Path, float] = {}
-    result_map: dict[Path, SearchResult] = {}
+
+    def result_key(result: SearchResult) -> tuple[Path, int] | Path:
+        if show_chunks:
+            return (result.path, result.chunk_index)
+        return result.path
+
+    scores: dict[tuple[Path, int] | Path, float] = {}
+    result_map: dict[tuple[Path, int] | Path, SearchResult] = {}
 
     for rank, result in enumerate(bm25_results, start=1):
-        scores[result.path] = scores.get(result.path, 0.0) + 1.0 / (
-            RRF_RANK_CONSTANT + rank
-        )
-        result_map.setdefault(result.path, result)
+        key = result_key(result)
+        scores[key] = scores.get(key, 0.0) + 1.0 / (RRF_RANK_CONSTANT + rank)
+        result_map.setdefault(key, result)
 
     for rank, result in enumerate(semantic_results, start=1):
-        scores[result.path] = scores.get(result.path, 0.0) + 1.0 / (
-            RRF_RANK_CONSTANT + rank
-        )
-        result_map.setdefault(result.path, result)
+        key = result_key(result)
+        scores[key] = scores.get(key, 0.0) + 1.0 / (RRF_RANK_CONSTANT + rank)
+        result_map.setdefault(key, result)
 
     ranked = sorted(scores.items(), key=lambda item: item[1], reverse=True)
     return [
         SearchResult(
-            path=path,
-            url=result_map[path].url,
-            title=result_map[path].title,
-            folder=result_map[path].folder,
-            description=result_map[path].description,
+            path=result_map[key].path,
+            url=result_map[key].url,
+            title=result_map[key].title,
+            folder=result_map[key].folder,
+            description=result_map[key].description,
             score=round(score, 6),
-            snippet=result_map[path].snippet,
-            section=result_map[path].section,
-            chunk_index=result_map[path].chunk_index,
+            snippet=result_map[key].snippet,
+            section=result_map[key].section,
+            chunk_index=result_map[key].chunk_index,
         )
-        for path, score in ranked[:limit]
+        for key, score in ranked[:limit]
     ]
 
 
@@ -192,9 +201,11 @@ def search_bookmarks_hybrid(
     bookmarks_dir: Path | None = None,
     database_path: Path | None = None,
     folder: str | None = None,
+    tag: str | None = None,
     limit: int = DEFAULT_SEARCH_LIMIT,
     rebuild: bool = False,
     threshold: float = DEFAULT_SIMILARITY_THRESHOLD,
+    show_chunks: bool = False,
 ) -> list[SearchResult]:
     """Combine BM25 and semantic search via Reciprocal Rank Fusion."""
     from .embeddings import refresh_embeddings, semantic_search
@@ -218,7 +229,9 @@ def search_bookmarks_hybrid(
         query,
         database_path=database_path,
         folder=folder,
+        tag=tag,
         limit=candidate_limit,
+        show_chunks=show_chunks,
     )
 
     semantic_results = [
@@ -227,12 +240,19 @@ def search_bookmarks_hybrid(
             query,
             database_path=database_path,
             folder=folder,
+            tag=tag,
             limit=candidate_limit,
             threshold=threshold,
+            show_chunks=show_chunks,
         )
     ]
 
-    return _reciprocal_rank_fusion(bm25_results, semantic_results, limit)
+    return _reciprocal_rank_fusion(
+        bm25_results,
+        semantic_results,
+        limit,
+        show_chunks=show_chunks,
+    )
 
 
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
@@ -397,16 +417,20 @@ def main(argv: Sequence[str] | None = None) -> int:
             results = search_bookmarks_hybrid(
                 args.query,
                 folder=args.folder,
+                tag=args.tag,
                 limit=args.limit,
                 rebuild=args.rebuild,
                 threshold=args.threshold,
+                show_chunks=args.show_chunks,
             )
         elif args.semantic:
             results = search_bookmarks_semantic(
                 args.query,
                 folder=args.folder,
+                tag=args.tag,
                 limit=args.limit,
                 threshold=args.threshold,
+                show_chunks=args.show_chunks,
             )
         else:
             results = search_bookmarks(

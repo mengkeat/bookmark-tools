@@ -11,6 +11,7 @@ from bookmark_tools.embeddings import (
     EMBEDDING_DIMENSIONS,
     EMBEDDING_TABLE,
     EmbeddingMatch,
+    build_embedding_chunk_text,
     build_embedding_text,
     refresh_embeddings,
     rebuild_embeddings,
@@ -89,6 +90,19 @@ def _fake_embeddings(texts: list[str], _config: dict[str, str]) -> list[list[flo
 FAKE_CONFIG = {"api_key": "test-key", "model": "test", "base_url": "http://test"}
 
 
+def _needle_embeddings(texts: list[str], _config: dict[str, str]) -> list[list[float]]:
+    """Return vectors that strongly match text containing a needle term."""
+    results: list[list[float]] = []
+    for text in texts:
+        vector = [0.0] * EMBEDDING_DIMENSIONS
+        if "late-archive-needle" in text or "needle query" in text:
+            vector[0] = 1.0
+        else:
+            vector[1] = 1.0
+        results.append(vector)
+    return results
+
+
 class EmbeddingHelpersTest(unittest.TestCase):
     def test_normalize_vector_produces_unit_length(self) -> None:
         """L2-normalized vector has magnitude 1."""
@@ -133,6 +147,23 @@ class EmbeddingHelpersTest(unittest.TestCase):
         self.assertIn("ml deep-learning", text)
         self.assertIn("Intro to NNs", text)
         self.assertNotIn("| |", text)
+
+    def test_build_embedding_chunk_text_includes_section_and_chunk_body(self) -> None:
+        """Chunk embedding text includes the matching section content."""
+        with TemporaryDirectory() as tmp:
+            doc = _make_document(
+                Path(tmp) / "Bookmarks",
+                "ML-AI/test.md",
+                title="Neural Networks",
+                body="## Archive\nlate-archive-needle appears deep in the archive.",
+            )
+            from bookmark_tools.chunking import chunk_document
+
+            chunk = chunk_document(doc)[0]
+
+        text = build_embedding_chunk_text(chunk)
+        self.assertIn("archive", text)
+        self.assertIn("late-archive-needle", text)
 
 
 class EmbeddingIndexTest(unittest.TestCase):
@@ -432,6 +463,65 @@ class EmbeddingIndexTest(unittest.TestCase):
         titles = [r.title for r in results]
         self.assertIn("GPT", titles)
         self.assertNotIn("Django", titles)
+
+    @patch("bookmark_tools.embeddings.embed_texts", side_effect=_fake_embeddings)
+    def test_semantic_search_filters_by_tag(self, _mock: object) -> None:
+        """Tag filtering restricts semantic results to matching bookmarks."""
+        with TemporaryDirectory() as tmp:
+            bookmarks_dir = Path(tmp) / "Bookmarks"
+            db_path = Path(tmp) / "test.sqlite3"
+
+            doc_a = _make_document(
+                bookmarks_dir, "ML-AI/gpt.md", title="GPT", tags="ml transformers"
+            )
+            doc_b = _make_document(
+                bookmarks_dir,
+                "Development/django.md",
+                title="Django",
+                tags="python web",
+            )
+
+            refresh_embeddings(
+                [doc_a, doc_b], database_path=db_path, config=FAKE_CONFIG
+            )
+            results = semantic_search(
+                "test",
+                database_path=db_path,
+                config=FAKE_CONFIG,
+                tag="transformers",
+                threshold=0.0,
+            )
+
+        self.assertEqual([r.title for r in results], ["GPT"])
+
+    @patch("bookmark_tools.embeddings.embed_texts", side_effect=_needle_embeddings)
+    def test_semantic_search_returns_best_matching_chunk(self, _mock: object) -> None:
+        """Semantic search embeds chunks, including text past the old body prefix."""
+        with TemporaryDirectory() as tmp:
+            bookmarks_dir = Path(tmp) / "Bookmarks"
+            db_path = Path(tmp) / "test.sqlite3"
+            doc = _make_document(
+                bookmarks_dir,
+                "Research/archive.md",
+                title="Archived Research",
+                body=(
+                    "## Summary\n"
+                    + " ".join("summary" for _ in range(120))
+                    + "\n\n## Archive\nlate-archive-needle appears here."
+                ),
+            )
+
+            refresh_embeddings([doc], database_path=db_path, config=FAKE_CONFIG)
+            results = semantic_search(
+                "needle query",
+                database_path=db_path,
+                config=FAKE_CONFIG,
+                threshold=0.0,
+            )
+
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0].section, "archive")
+        self.assertIn("late-archive-needle", results[0].snippet)
 
     @patch("bookmark_tools.embeddings.embed_texts", side_effect=_fake_embeddings)
     def test_search_bookmarks_semantic_returns_search_results(
