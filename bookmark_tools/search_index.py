@@ -32,12 +32,13 @@ class SearchResult:
 
 
 def _connect(database_path: Path | None = None) -> sqlite3.Connection:
-    """Open the search database with row access enabled."""
+    """Open the search database with catalog schema ensured."""
+    from .catalog import connect as catalog_connect, ensure_catalog_schema
+
     if database_path is None:
         database_path = get_search_index_path()
-    database_path.parent.mkdir(parents=True, exist_ok=True)
-    connection = sqlite3.connect(database_path)
-    connection.row_factory = sqlite3.Row
+    connection = catalog_connect(database_path)
+    ensure_catalog_schema(connection)
     return connection
 
 
