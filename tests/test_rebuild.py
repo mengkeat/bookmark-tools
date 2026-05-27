@@ -135,9 +135,7 @@ class BookmarkRebuildTest(unittest.TestCase):
 
             conn = catalog_connect(database_path)
             try:
-                row = conn.execute(
-                    f"SELECT title FROM {BOOKMARKS_TABLE}"
-                ).fetchone()
+                row = conn.execute(f"SELECT title FROM {BOOKMARKS_TABLE}").fetchone()
                 self.assertIsNotNone(row)
                 self.assertEqual(row["title"], "Python Search")
             finally:

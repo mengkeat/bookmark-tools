@@ -59,7 +59,7 @@ def _write_note(
         line
         for line in [
             "---",
-            f"schema_version: 1",
+            "schema_version: 1",
             f"id: {bookmark_id}",
             f"url: {url}",
             f"title: {title}",
@@ -161,12 +161,16 @@ class CatalogSchemaTest(unittest.TestCase):
                     f"VALUES ('test', '/fake.md', 'https://example.com', '{{}}')"
                 )
                 conn.commit()
-                count = conn.execute(f"SELECT COUNT(*) FROM {BOOKMARKS_TABLE}").fetchone()[0]
+                count = conn.execute(
+                    f"SELECT COUNT(*) FROM {BOOKMARKS_TABLE}"
+                ).fetchone()[0]
                 self.assertEqual(count, 1)
 
                 # Rebuild
                 rebuild_catalog_schema(conn)
-                count = conn.execute(f"SELECT COUNT(*) FROM {BOOKMARKS_TABLE}").fetchone()[0]
+                count = conn.execute(
+                    f"SELECT COUNT(*) FROM {BOOKMARKS_TABLE}"
+                ).fetchone()[0]
                 self.assertEqual(count, 0)
                 version = get_catalog_version(conn)
                 self.assertEqual(version, CATALOG_SCHEMA_VERSION)
@@ -247,9 +251,7 @@ class PopulateBookmarksTest(unittest.TestCase):
                 count = populate_bookmarks(conn, bookmarks_dir)
                 self.assertEqual(count, 1)
 
-                row = conn.execute(
-                    f"SELECT * FROM {BOOKMARKS_TABLE}"
-                ).fetchone()
+                row = conn.execute(f"SELECT * FROM {BOOKMARKS_TABLE}").fetchone()
                 self.assertEqual(row["title"], "Test Page")
                 self.assertEqual(row["url"], "https://example.com/test")
                 self.assertEqual(row["folder"], "Testing")
@@ -306,14 +308,18 @@ class PopulateBookmarksTest(unittest.TestCase):
                 ensure_catalog_schema(conn)
                 populate_bookmarks(conn, bookmarks_dir)
                 self.assertEqual(
-                    conn.execute(f"SELECT COUNT(*) FROM {BOOKMARKS_TABLE}").fetchone()[0],
+                    conn.execute(f"SELECT COUNT(*) FROM {BOOKMARKS_TABLE}").fetchone()[
+                        0
+                    ],
                     2,
                 )
                 # Remove one note and re-populate
                 (bookmarks_dir / "Testing" / "b.md").unlink()
                 populate_bookmarks(conn, bookmarks_dir)
                 self.assertEqual(
-                    conn.execute(f"SELECT COUNT(*) FROM {BOOKMARKS_TABLE}").fetchone()[0],
+                    conn.execute(f"SELECT COUNT(*) FROM {BOOKMARKS_TABLE}").fetchone()[
+                        0
+                    ],
                     1,
                 )
             finally:
@@ -344,17 +350,13 @@ class UpsertBookmarkTest(unittest.TestCase):
         with TemporaryDirectory() as tmp:
             bookmarks_dir = Path(tmp) / "Bookmarks"
             db_path = Path(tmp) / "catalog.sqlite3"
-            note_path = _write_note(
-                bookmarks_dir, "Testing/test.md", title="Original"
-            )
+            note_path = _write_note(bookmarks_dir, "Testing/test.md", title="Original")
 
             conn = connect(db_path)
             try:
                 ensure_catalog_schema(conn)
                 upsert_bookmark(conn, note_path, bookmarks_dir)
-                row = conn.execute(
-                    f"SELECT title FROM {BOOKMARKS_TABLE}"
-                ).fetchone()
+                row = conn.execute(f"SELECT title FROM {BOOKMARKS_TABLE}").fetchone()
                 self.assertEqual(row["title"], "Original")
 
                 # Update the note
@@ -363,9 +365,7 @@ class UpsertBookmarkTest(unittest.TestCase):
                     encoding="utf-8",
                 )
                 upsert_bookmark(conn, note_path, bookmarks_dir)
-                row = conn.execute(
-                    f"SELECT title FROM {BOOKMARKS_TABLE}"
-                ).fetchone()
+                row = conn.execute(f"SELECT title FROM {BOOKMARKS_TABLE}").fetchone()
                 self.assertEqual(row["title"], "Updated")
                 # Still only one row
                 count = conn.execute(
@@ -407,7 +407,9 @@ class DeleteFromCatalogTest(unittest.TestCase):
                 ensure_catalog_schema(conn)
                 populate_bookmarks(conn, bookmarks_dir)
                 self.assertEqual(
-                    conn.execute(f"SELECT COUNT(*) FROM {BOOKMARKS_TABLE}").fetchone()[0],
+                    conn.execute(f"SELECT COUNT(*) FROM {BOOKMARKS_TABLE}").fetchone()[
+                        0
+                    ],
                     1,
                 )
             finally:
@@ -418,7 +420,9 @@ class DeleteFromCatalogTest(unittest.TestCase):
             conn = connect(db_path)
             try:
                 self.assertEqual(
-                    conn.execute(f"SELECT COUNT(*) FROM {BOOKMARKS_TABLE}").fetchone()[0],
+                    conn.execute(f"SELECT COUNT(*) FROM {BOOKMARKS_TABLE}").fetchone()[
+                        0
+                    ],
                     0,
                 )
             finally:
@@ -455,9 +459,7 @@ class RebuildCatalogTest(unittest.TestCase):
             # Verify bookmarks table
             conn = connect(db_path)
             try:
-                row = conn.execute(
-                    f"SELECT title FROM {BOOKMARKS_TABLE}"
-                ).fetchone()
+                row = conn.execute(f"SELECT title FROM {BOOKMARKS_TABLE}").fetchone()
                 self.assertIsNotNone(row)
                 self.assertEqual(row["title"], "SQLite Guide")
             finally:

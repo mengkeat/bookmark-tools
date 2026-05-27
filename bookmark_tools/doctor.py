@@ -13,10 +13,8 @@ from .classify import get_llm_config
 from .catalog import (
     BOOKMARKS_TABLE as CATALOG_BOOKMARKS_TABLE,
     CATALOG_SCHEMA_VERSION,
-    META_TABLE,
     catalog_tables_exist,
     connect as catalog_connect,
-    ensure_catalog_schema,
     get_catalog_version,
     table_names as catalog_table_names,
 )
@@ -617,11 +615,15 @@ def _check_catalog(
         # Check for orphaned catalog rows (notes that no longer exist)
         if catalog_count > 0:
             note_path_set = {str(p) for p in bookmark_paths}
-            orphaned_rows = connection.execute(
-                f"SELECT note_path FROM {CATALOG_BOOKMARKS_TABLE} "
-                f"WHERE note_path NOT IN ({','.join('?' * len(note_path_set))})",
-                list(note_path_set),
-            ).fetchall() if note_path_set else []
+            orphaned_rows = (
+                connection.execute(
+                    f"SELECT note_path FROM {CATALOG_BOOKMARKS_TABLE} "
+                    f"WHERE note_path NOT IN ({','.join('?' * len(note_path_set))})",
+                    list(note_path_set),
+                ).fetchall()
+                if note_path_set
+                else []
+            )
             if orphaned_rows:
                 report.add_issue(
                     _issue(
