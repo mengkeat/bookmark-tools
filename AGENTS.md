@@ -147,6 +147,20 @@ Uses the `bookmark-check` script entry point defined in `pyproject.toml`, which 
 | `--verbose`, `-v` | No | False | Enable verbose (debug) logging output |
 | `--quiet`, `-q` | No | False | Suppress all logging output except errors |
 
+#### Derived state rebuild entry point
+```
+uv run bookmark-rebuild [--catalog] [--no-embeddings] [--json] [--verbose] [--quiet]
+```
+Uses the `bookmark-rebuild` script entry point defined in `pyproject.toml`, which calls `bookmark_tools.rebuild:main`.
+
+| Argument | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `--catalog` | No | False | Rebuild the unified catalog (bookmarks, FTS, embeddings, stubs) |
+| `--no-embeddings` | No | False | Skip embedding rebuild |
+| `--json` | No | False | Print a JSON result object |
+| `--verbose`, `-v` | No | False | Enable verbose (debug) logging output |
+| `--quiet`, `-q` | No | False | Suppress all logging output except errors |
+
 #### High-level execution order
 
 ```
@@ -188,6 +202,7 @@ Start with rows marked **Mutable**. Most implementation changes should be confin
 | `bookmark_tools/__init__.py` | Package re-export | `main` (re-exported from cli) | Read-Only |
 | `bookmark_tools/__main__.py` | Package runner | Calls `cli.main()` | Read-Only |
 | `bookmark_tools/search.py` | Search orchestration: CLI argument parsing, BM25/semantic/hybrid search, result formatting, logging | `main()`, `search_bookmarks()`, `search_bookmarks_semantic()`, `search_bookmarks_hybrid()`, `_reciprocal_rank_fusion()`, `parse_args()`, `configure_logging()` | **Mutable** (business logic) |
+| `bookmark_tools/catalog.py` | Unified SQLite catalog: schema versioning, migrations, bookmarks metadata, fetch_log, stubs for chunks/edges/jobs, compatibility wrappers | `connect()`, `ensure_catalog_schema()`, `rebuild_catalog()`, `delete_from_catalog()`, `upsert_bookmark()`, `populate_bookmarks()`, `get_catalog_info()`, `CatalogResult`, `CatalogInfo` | Read-Only (utility) |
 | `bookmark_tools/search_index.py` | SQLite FTS5 index management: schema creation, BM25-weighted search, query sanitization | `rebuild_search_index()`, `update_search_index()`, `search_index()`, `SearchResult` | Read-Only (utility) |
 | `bookmark_tools/search_documents.py` | Document collection: reads vault notes and normalizes frontmatter + body into `SearchDocument` records | `collect_search_documents()`, `SearchDocument` | Read-Only (utility) |
 | `bookmark_tools/embeddings.py` | Embedding-based semantic search: OpenAI embedding API, vector storage in SQLite, cosine similarity ranking, retry support | `embed_texts()`, `build_embedding_text()`, `refresh_embeddings()`, `semantic_search()`, `EmbeddingMatch` | Read-Only (utility) |
@@ -203,6 +218,7 @@ Start with rows marked **Mutable**. Most implementation changes should be confin
 | `tests/test_integration.py` | Integration tests for full `build_note()` pipeline with mocked network | `BookmarkIntegrationTest` | Test file |
 | `tests/test_http_retry.py` | Unit tests for HTTP retry: exponential backoff, jitter, retryable codes, non-retryable errors | `HttpRetryTest` | Test file |
 | `tests/test_fetch.py` | Unit tests for fetch module: metadata parsing, HTML cleaning, page data extraction | `FetchTest` | Test file |
+| `tests/test_catalog.py` | Unit tests for catalog: schema, migrations, CRUD, rebuild, upgrade paths | `CatalogConnectionTest`, `CatalogSchemaTest`, `PopulateBookmarksTest`, `UpsertBookmarkTest`, `DeleteFromCatalogTest`, `RebuildCatalogTest`, `GetCatalogInfoTest`, `CatalogResultTest`, `CatalogSchemaUpgradeTest` | Test file |
 | `tests/test_check.py` | Unit tests for bookmark-check: URL checking, problem detection, edge cases | `BookmarkCheckTest` | Test file |
 | `tests/test_note_filter.py` | Unit tests for note filter: archive sidecar detection, bookmark path iteration | `IsArchiveSidecarTest`, `IterBookmarkNotePathsTest` | Test file |
 | `tests/test_paths.py` | Unit tests for paths: fail-fast vault validation, directory resolution | `RequireBookmarksDirTest`, `GetBookmarksDirTest` | Test file |
@@ -267,6 +283,31 @@ related: str           — Space-joined related-note list
 parent_topic: str      — From frontmatter
 description: str       — From frontmatter
 body: str              — Markdown body text (below frontmatter), whitespace-collapsed
+```
+
+#### `CatalogResult` (dataclass, frozen) — `catalog.py`
+Result summary for a catalog rebuild operation.
+```
+database_path: Path
+bookmark_count: int
+fts_rebuilt: bool
+embeddings_rebuilt: bool
+embeddings_skipped_reason: str = ""
+```
+
+#### `CatalogInfo` (dataclass, frozen) — `catalog.py`
+Summary of catalog state for display and doctor checks.
+```
+database_path: Path
+exists: bool
+schema_version: int
+bookmark_count: int
+fts_count: int
+embedding_count: int
+fetch_log_count: int
+chunk_count: int
+edge_count: int
+job_count: int
 ```
 
 #### `SearchResult` (dataclass, frozen) — `search_index.py`
@@ -346,7 +387,7 @@ title, url, type, tags, created, last_updated, language, related, parent_topic, 
 | Duplicate URL lookup | `BookmarkProfile.url_index` | `classify.py:find_existing_url(url, profile)` | Uses prebuilt map (fallback filesystem scan only when profile is not provided) |
 | Write new note | `$BOOKMARKS_DIR/<folder>/<slug>.md` | `cli.py:main()` | `mkdir -p` + `write_text()`; skipped in `--dry-run` mode |
 | Read notes for search indexing | `$BOOKMARKS_DIR/**/*.md` | `search_documents.py:collect_search_documents()` | Reads frontmatter + body; normalizes into `SearchDocument` records |
-| SQLite search database | Configured via `BOOKMARK_SEARCH_INDEX` | `search_index.py`, `embeddings.py` | Shared database; FTS5 virtual table for BM25 search + `embedding_store` table for semantic vectors |
+| SQLite search database | Configured via `BOOKMARK_SEARCH_INDEX` | `catalog.py`, `search_index.py`, `embeddings.py` | Unified catalog DB: FTS5 virtual table for BM25 search + `embedding_store` for semantic vectors + `bookmarks` derived metadata + `fetch_log` + stubs for chunks/edges/jobs |
 
 #### Environment Variables
 | Variable | Required | Default | Used In |
@@ -386,6 +427,7 @@ If `LLM_PROVIDER` is not `openrouter` and no base URL is set, default base URL i
 15. **Single-URL-only import** was extended with `--file`/`-f` flag for batch import from files or stdin.
 16. **No link health checking** was resolved: `bookmark-check` CLI now validates all bookmarked URLs via HEAD requests.
 17. **No integration tests** was resolved: full `build_note()` pipeline tests with mocked network are now in `tests/test_integration.py`.
+18. **Fragmented derived state** was consolidated: `catalog.py` provides unified SQLite schema versioning, migrations, and a `bookmarks` derived metadata table, plus stubs for chunks/edges/jobs. All modules (search_index, embeddings, delete, update, reorg, cli) now maintain the catalog on writes. Doctor checks catalog health. `bookmark-rebuild --catalog` rebuilds everything from Markdown.
 
 #### Remaining technical debt
 
