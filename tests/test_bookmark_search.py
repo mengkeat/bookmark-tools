@@ -13,7 +13,7 @@ from bookmark_tools.search import (
     search_bookmarks,
 )
 from bookmark_tools.search_documents import collect_search_documents
-from bookmark_tools.search_index import SearchResult
+from bookmark_tools.search_index import SearchResult, search_index
 
 
 class BookmarkSearchTest(unittest.TestCase):
@@ -279,6 +279,73 @@ class BookmarkSearchTest(unittest.TestCase):
         self.assertEqual(len(results), 1)
         self.assertIn("FTS5", results[0].snippet)
 
+    def test_search_results_identify_matching_chunk_section(self) -> None:
+        """Results report the section that produced the best matching chunk."""
+        with TemporaryDirectory() as tmp:
+            bookmarks_dir = Path(tmp) / "Bookmarks"
+            database_path = Path(tmp) / "bookmark-search.sqlite3"
+            self._write_note(
+                bookmarks_dir,
+                "Research/archive-heavy.md",
+                url="https://example.com/archive-heavy",
+                title="Archive Heavy Note",
+                tags=["retrieval"],
+                related=["search"],
+                parent_topic="Search",
+                description="A note with archived content",
+                body=(
+                    "## Summary\nShort overview.\n\n"
+                    "## Archive\n"
+                    + " ".join("ordinary" for _ in range(120))
+                    + " deep-archive-needle"
+                ),
+            )
+
+            results = search_bookmarks(
+                "deep archive needle",
+                bookmarks_dir=bookmarks_dir,
+                database_path=database_path,
+            )
+
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0].section, "archive")
+        self.assertIn("needle", results[0].snippet)
+
+    def test_search_dedupes_chunks_by_note_by_default(self) -> None:
+        """Default search returns one best chunk per bookmark note."""
+        with TemporaryDirectory() as tmp:
+            bookmarks_dir = Path(tmp) / "Bookmarks"
+            database_path = Path(tmp) / "bookmark-search.sqlite3"
+            self._write_note(
+                bookmarks_dir,
+                "Research/multi-section.md",
+                url="https://example.com/multi-section",
+                title="Multi Section Note",
+                tags=["retrieval"],
+                related=["search"],
+                parent_topic="Search",
+                description="A note with repeated terms",
+                body="## Summary\nchunkterm in summary.\n\n## Notes\nchunkterm in notes.",
+            )
+
+            results = search_bookmarks(
+                "chunkterm",
+                bookmarks_dir=bookmarks_dir,
+                database_path=database_path,
+            )
+            chunk_results = search_index(
+                "chunkterm",
+                database_path=database_path,
+                show_chunks=True,
+                limit=10,
+            )
+
+        self.assertEqual(len(results), 1)
+        self.assertGreaterEqual(len(chunk_results), 2)
+        self.assertEqual(
+            {result.title for result in chunk_results}, {"Multi Section Note"}
+        )
+
     def test_stemming_matches_word_variants(self) -> None:
         """Porter stemming matches inflected forms of words."""
         with TemporaryDirectory() as tmp:
@@ -434,7 +501,18 @@ class SearchExportTest(unittest.TestCase):
         reader = csv.reader(io.StringIO(output))
         rows = list(reader)
         self.assertEqual(
-            rows[0], ["title", "url", "folder", "path", "description", "score"]
+            rows[0],
+            [
+                "title",
+                "url",
+                "folder",
+                "path",
+                "description",
+                "score",
+                "section",
+                "chunk_index",
+                "snippet",
+            ],
         )
         self.assertEqual(len(rows), 3)  # header + 2 data rows
         self.assertEqual(rows[1][0], "Python Guide")

@@ -53,7 +53,10 @@ def collect_search_documents(
         raw_text = _read_note_text(note_path)
         note = parse_note_text(raw_text, path=note_path)
         metadata = note.frontmatter
-        body = WHITESPACE_PATTERN.sub(" ", note.body).strip()
+        # Preserve Markdown heading line structure so downstream chunking can
+        # split by sections. Individual FTS/embedding chunk text is normalized
+        # later by ``bookmark_tools.chunking``.
+        body = note.body.strip()
         relative_folder = str(note_path.relative_to(bookmarks_dir).parent)
 
         # Append final/canonical URL text for search matching

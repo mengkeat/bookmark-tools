@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 from pathlib import Path
-from tempfile import TemporaryDirectory
 import unittest
 
-from bookmark_tools.chunking import chunk_document, chunk_documents, split_markdown_sections
+from bookmark_tools.chunking import (
+    chunk_document,
+    chunk_documents,
+    split_markdown_sections,
+)
 from bookmark_tools.search_documents import SearchDocument
 
 
@@ -28,7 +31,9 @@ class ChunkingTest(unittest.TestCase):
             "Summary: prelude text\n\n## Key ideas\n- alpha\n- beta\n\n## Notes\nHuman note."
         )
 
-        self.assertEqual([section.name for section in sections], ["summary", "key_ideas", "notes"])
+        self.assertEqual(
+            [section.name for section in sections], ["summary", "key_ideas", "notes"]
+        )
         self.assertIn("alpha", sections[1].text)
 
     def test_chunk_document_splits_large_sections(self) -> None:
@@ -37,7 +42,9 @@ class ChunkingTest(unittest.TestCase):
 
         self.assertGreater(len(chunks), 1)
         self.assertTrue(all(chunk.section == "archive" for chunk in chunks))
-        self.assertEqual([chunk.chunk_index for chunk in chunks], list(range(len(chunks))))
+        self.assertEqual(
+            [chunk.chunk_index for chunk in chunks], list(range(len(chunks)))
+        )
         self.assertTrue(all(chunk.text_hash.startswith("sha256:") for chunk in chunks))
         self.assertTrue(all(chunk.token_count > 0 for chunk in chunks))
 

@@ -70,6 +70,7 @@ def search_bookmarks(
     tag: str | None = None,
     limit: int = DEFAULT_SEARCH_LIMIT,
     rebuild: bool = False,
+    show_chunks: bool = False,
 ) -> list[SearchResult]:
     """Refresh the index and return BM25-ranked search results.
 
@@ -91,6 +92,7 @@ def search_bookmarks(
         folder=folder,
         tag=tag,
         limit=limit,
+        show_chunks=show_chunks,
     )
 
 
@@ -131,6 +133,9 @@ def _embedding_match_to_result(match: EmbeddingMatch) -> SearchResult:
         folder=match.folder,
         description=match.description,
         score=match.similarity,
+        snippet=getattr(match, "snippet", ""),
+        section=getattr(match, "section", ""),
+        chunk_index=getattr(match, "chunk_index", 0),
     )
 
 
@@ -173,6 +178,9 @@ def _reciprocal_rank_fusion(
             folder=result_map[path].folder,
             description=result_map[path].description,
             score=round(score, 6),
+            snippet=result_map[path].snippet,
+            section=result_map[path].section,
+            chunk_index=result_map[path].chunk_index,
         )
         for path, score in ranked[:limit]
     ]
@@ -242,6 +250,11 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         help="Restrict results to bookmarks with the given tag",
     )
     parser.add_argument(
+        "--show-chunks",
+        action="store_true",
+        help="Show multiple matching chunks from the same bookmark",
+    )
+    parser.add_argument(
         "--limit",
         type=_positive_int,
         default=DEFAULT_SEARCH_LIMIT,
@@ -308,6 +321,8 @@ def _print_result(position: int, result: SearchResult) -> None:
     print(f"   Folder: {_display_folder(result.folder)}")
     print(f"   URL: {result.url}")
     print(f"   Path: {result.path}")
+    if result.section:
+        print(f"   Section: {result.section} (chunk {result.chunk_index})")
     if result.description:
         print(f"   Description: {_format_description(result.description)}")
     if result.snippet:
@@ -326,6 +341,9 @@ def _format_results_json(results: list[SearchResult]) -> str:
                 "path": str(r.path),
                 "description": r.description,
                 "score": round(r.score, 4),
+                "snippet": r.snippet,
+                "section": r.section,
+                "chunk_index": r.chunk_index,
             }
             for r in results
         ],
@@ -337,10 +355,32 @@ def _format_results_csv(results: list[SearchResult]) -> str:
     """Serialize search results as CSV with a header row."""
     output = io.StringIO()
     writer = csv.writer(output)
-    writer.writerow(["title", "url", "folder", "path", "description", "score"])
+    writer.writerow(
+        [
+            "title",
+            "url",
+            "folder",
+            "path",
+            "description",
+            "score",
+            "section",
+            "chunk_index",
+            "snippet",
+        ]
+    )
     for r in results:
         writer.writerow(
-            [r.title, r.url, r.folder, str(r.path), r.description, f"{r.score:.4f}"]
+            [
+                r.title,
+                r.url,
+                r.folder,
+                str(r.path),
+                r.description,
+                f"{r.score:.4f}",
+                r.section,
+                r.chunk_index,
+                r.snippet,
+            ]
         )
     return output.getvalue()
 
@@ -375,6 +415,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 tag=args.tag,
                 limit=args.limit,
                 rebuild=args.rebuild,
+                show_chunks=args.show_chunks,
             )
     except (BookmarkPathError, ValueError) as exc:
         logger.error("%s", exc)

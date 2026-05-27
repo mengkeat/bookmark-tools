@@ -200,6 +200,8 @@ def _create_fts_table(connection: sqlite3.Connection) -> None:
         CREATE VIRTUAL TABLE IF NOT EXISTS {SEARCH_TABLE} USING fts5(
             path UNINDEXED,
             url UNINDEXED,
+            section UNINDEXED,
+            chunk_index UNINDEXED,
             title,
             folder,
             tags,
@@ -506,28 +508,54 @@ def _populate_fts(
 
     Uses the catalog's existing connection rather than opening a new one.
     """
+    from .chunking import chunk_documents
+    from .note_schema import stable_bookmark_id
+
     if not documents:
         return
+    chunks = chunk_documents(documents)
     connection.executemany(
         f"""
         INSERT INTO {SEARCH_TABLE} (
-            path, url, title, folder, tags,
+            path, url, section, chunk_index, title, folder, tags,
             related, parent_topic, description, body
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         [
             (
-                str(doc.path),
-                doc.url,
-                doc.title,
-                doc.folder,
-                doc.tags,
-                doc.related,
-                doc.parent_topic,
-                doc.description,
-                doc.body,
+                str(chunk.path),
+                chunk.url,
+                chunk.section,
+                chunk.chunk_index,
+                chunk.title,
+                chunk.folder,
+                chunk.tags,
+                chunk.related,
+                chunk.parent_topic,
+                chunk.description,
+                chunk.chunk_text,
             )
-            for doc in documents
+            for chunk in chunks
+        ],
+    )
+    connection.executemany(
+        f"""
+        INSERT INTO {CHUNKS_TABLE} (
+            bookmark_id, note_path, section, chunk_index,
+            chunk_text, token_count, text_hash
+        ) VALUES (?, ?, ?, ?, ?, ?, ?)
+        """,
+        [
+            (
+                stable_bookmark_id(chunk.url) if chunk.url else str(chunk.path),
+                str(chunk.path),
+                chunk.section,
+                chunk.chunk_index,
+                chunk.chunk_text,
+                chunk.token_count,
+                chunk.text_hash,
+            )
+            for chunk in chunks
         ],
     )
     connection.executemany(

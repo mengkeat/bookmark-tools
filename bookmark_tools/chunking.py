@@ -103,7 +103,11 @@ def split_markdown_sections(markdown_body: str) -> list[_Section]:
     for index, match in enumerate(matches):
         heading = match.group(2).strip()
         content_start = match.end()
-        content_end = matches[index + 1].start() if index + 1 < len(matches) else len(markdown_body)
+        content_end = (
+            matches[index + 1].start()
+            if index + 1 < len(matches)
+            else len(markdown_body)
+        )
         section_text = _normalize_text(markdown_body[content_start:content_end])
         if section_text:
             sections.append(_Section(_section_name_from_heading(heading), section_text))
@@ -130,7 +134,9 @@ def _split_large_text(
         end = hard_end
         if hard_end < len(text):
             # Prefer sentence/word boundaries near the budget.
-            boundary = max(text.rfind(". ", start, hard_end), text.rfind(" ", start, hard_end))
+            boundary = max(
+                text.rfind(". ", start, hard_end), text.rfind(" ", start, hard_end)
+            )
             if boundary > start + max(MIN_CHUNK_CHARS, max_chars // 2):
                 end = boundary + 1
         chunk = text[start:end].strip()
@@ -163,7 +169,11 @@ def chunk_document(
     chunk_index = 0
     sections = split_markdown_sections(document.body)
     if not sections:
-        sections = [_Section("metadata", _normalize_text(document.description or document.title))]
+        sections = [
+            _Section(
+                "metadata", _normalize_text(document.description or document.title)
+            )
+        ]
 
     for section in sections:
         for chunk_text in _split_large_text(
