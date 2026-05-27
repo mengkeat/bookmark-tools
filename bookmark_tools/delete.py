@@ -5,14 +5,13 @@ import logging
 from pathlib import Path
 from typing import Sequence
 
-from .embeddings import delete_from_embedding_store
+from .catalog import delete_from_catalog
 from .paths import (
     BookmarkPathError,
     get_search_index_path,
     load_env,
     require_bookmarks_dir,
 )
-from .search_index import delete_from_search_index
 from .url_normalize import normalize_url
 from .vault_profile import collect_existing_notes
 
@@ -69,8 +68,7 @@ def delete_bookmark(
     if dry_run:
         return note_path
 
-    delete_from_search_index(note_path, database_path=database_path)
-    delete_from_embedding_store(note_path, database_path=database_path)
+    delete_from_catalog(note_path, database_path=database_path)
     note_path.unlink()
 
     # Remove empty parent directories up to (but not including) bookmarks_dir
