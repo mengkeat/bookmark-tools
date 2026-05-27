@@ -10,6 +10,16 @@ from pathlib import Path
 from typing import Any, Sequence
 
 from .classify import get_llm_config
+from .catalog import (
+    BOOKMARKS_TABLE as CATALOG_BOOKMARKS_TABLE,
+    CATALOG_SCHEMA_VERSION,
+    META_TABLE,
+    catalog_tables_exist,
+    connect as catalog_connect,
+    ensure_catalog_schema,
+    get_catalog_version,
+    table_names as catalog_table_names,
+)
 from .embeddings import EMBEDDING_TABLE, embedding_dimensions, embedding_model
 from .note_filter import is_archive_sidecar, iter_bookmark_note_paths
 from .note_schema import parse_note_file, validate_schema_v1
@@ -521,17 +531,176 @@ def _check_internal_links(
                 )
 
 
+def _check_catalog(
+    report: DoctorReport,
+    bookmark_paths: Sequence[Path],
+) -> bool:
+    """Check catalog schema version and bookmark table consistency.
+
+    Returns True when catalog issues are safe to repair by rebuilding.
+    """
+    database_path = report.database_path
+    if database_path is None or not database_path.exists():
+        return False
+
+    try:
+        connection = catalog_connect(database_path)
+    except sqlite3.DatabaseError:
+        return False
+
+    try:
+        has_tables = catalog_tables_exist(connection)
+        if not has_tables:
+            # Catalog tables don't exist yet — not an error, just not
+            # initialized.  Only warn if FTS tables already exist (meaning
+            # the DB is in use but hasn't been upgraded).
+            tables = catalog_table_names(connection)
+            if SEARCH_TABLE in tables:
+                report.add_issue(
+                    _issue(
+                        "catalog.not_initialized",
+                        "warning",
+                        "Database has search tables but no catalog metadata. "
+                        "Run bookmark-rebuild --catalog to initialize.",
+                        path=database_path,
+                        fixable=True,
+                    )
+                )
+                return True
+            return False
+
+        version = get_catalog_version(connection)
+        if version != CATALOG_SCHEMA_VERSION:
+            report.add_issue(
+                _issue(
+                    "catalog.version_mismatch",
+                    "warning",
+                    f"Catalog schema version is {version}, expected {CATALOG_SCHEMA_VERSION}. "
+                    "Run bookmark-rebuild --catalog to upgrade.",
+                    path=database_path,
+                    details={
+                        "current_version": version,
+                        "expected_version": CATALOG_SCHEMA_VERSION,
+                    },
+                    fixable=True,
+                )
+            )
+            return True
+
+        # Check bookmark count consistency
+        try:
+            catalog_count_row = connection.execute(
+                f"SELECT COUNT(*) FROM {CATALOG_BOOKMARKS_TABLE}"
+            ).fetchone()
+            catalog_count = int(catalog_count_row[0]) if catalog_count_row else 0
+        except sqlite3.OperationalError:
+            catalog_count = 0
+
+        note_count = len(bookmark_paths)
+
+        if catalog_count != note_count:
+            report.add_issue(
+                _issue(
+                    "catalog.bookmark_count_mismatch",
+                    "warning",
+                    "Catalog bookmark count does not match vault note count.",
+                    path=database_path,
+                    details={
+                        "catalog_count": catalog_count,
+                        "note_count": note_count,
+                    },
+                    fixable=True,
+                )
+            )
+            return True
+
+        # Check for orphaned catalog rows (notes that no longer exist)
+        if catalog_count > 0:
+            note_path_set = {str(p) for p in bookmark_paths}
+            orphaned_rows = connection.execute(
+                f"SELECT note_path FROM {CATALOG_BOOKMARKS_TABLE} "
+                f"WHERE note_path NOT IN ({','.join('?' * len(note_path_set))})",
+                list(note_path_set),
+            ).fetchall() if note_path_set else []
+            if orphaned_rows:
+                report.add_issue(
+                    _issue(
+                        "catalog.orphaned_rows",
+                        "warning",
+                        "Catalog contains entries for notes that no longer exist.",
+                        path=database_path,
+                        details={
+                            "count": len(orphaned_rows),
+                            "paths": [str(row[0]) for row in orphaned_rows[:10]],
+                        },
+                        fixable=True,
+                    )
+                )
+                return True
+
+    except sqlite3.DatabaseError:
+        return False
+    finally:
+        connection.close()
+
+    return False
+
+
 def _apply_fixes(
     report: DoctorReport,
     *,
     documents: list[SearchDocument],
+    bookmarks_dir: Path | None,
     fix_search: bool,
     fix_embeddings: bool,
+    fix_catalog: bool,
 ) -> None:
     """Apply safe doctor repairs."""
     database_path = report.database_path
     if database_path is None:
         return
+
+    if fix_catalog:
+        try:
+            from .catalog import rebuild_catalog
+
+            config = get_llm_config()
+            rebuild_catalog(
+                bookmarks_dir=bookmarks_dir,
+                database_path=database_path,
+                include_embeddings=bool(config),
+                embedding_config=config,
+            )
+        except (OSError, sqlite3.DatabaseError, ValueError) as exc:
+            report.add_issue(
+                _issue(
+                    "fix.catalog_failed",
+                    "error",
+                    f"Failed to rebuild catalog: {exc}",
+                    path=database_path,
+                )
+            )
+        else:
+            for issue in report.issues:
+                if issue.code.startswith("catalog.") and issue.fixable:
+                    issue.fixed = True
+            # Catalog rebuild also fixes search and embedding issues
+            for issue in report.issues:
+                if issue.code.startswith("search.") and issue.fixable:
+                    issue.fixed = True
+                if issue.code.startswith("embedding.") and issue.fixable:
+                    issue.fixed = True
+            report.add_issue(
+                _issue(
+                    "fix.catalog_rebuilt",
+                    "info",
+                    "Rebuilt unified catalog from bookmark Markdown.",
+                    path=database_path,
+                )
+            )
+            report.issues[-1].fixed = True
+            # Skip individual search/embedding fixes when catalog was rebuilt
+            return
 
     if fix_search:
         try:
@@ -657,13 +826,16 @@ def run_doctor(
     documents = collect_search_documents(bookmarks_dir=resolved_bookmarks)
     search_needs_fix = _check_search_index(report, documents)
     embeddings_need_fix = _check_embedding_store(report)
+    catalog_needs_fix = _check_catalog(report, bookmark_paths)
 
     if fix:
         _apply_fixes(
             report,
             documents=documents,
+            bookmarks_dir=resolved_bookmarks,
             fix_search=search_needs_fix,
             fix_embeddings=embeddings_need_fix,
+            fix_catalog=catalog_needs_fix,
         )
 
     return report

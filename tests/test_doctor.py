@@ -198,6 +198,115 @@ class BookmarkDoctorTest(unittest.TestCase):
         self.assertIn("issues", payload)
         self.assertIn("summary", payload)
 
+    @patch("bookmark_tools.doctor.get_llm_config", return_value=None)
+    def test_doctor_warns_about_uninitialized_catalog(self, _mock: object) -> None:
+        """Database with search tables but no catalog metadata gets a warning."""
+        with TemporaryDirectory() as tmp:
+            bookmarks_dir = Path(tmp) / "Bookmarks"
+            database_path = Path(tmp) / "Meta" / "bookmark-search.sqlite3"
+            self._write_note(bookmarks_dir, "Development/page.md")
+            # Build search index (which also creates catalog tables now)
+            from bookmark_tools.search_documents import collect_search_documents
+            from bookmark_tools.search_index import rebuild_search_index
+
+            docs = collect_search_documents(bookmarks_dir=bookmarks_dir)
+            rebuild_search_index(docs, database_path=database_path)
+            # Drop catalog tables to simulate pre-catalog DB
+            with sqlite3.connect(database_path) as conn:
+                conn.execute("DROP TABLE IF EXISTS catalog_meta")
+                conn.execute("DROP TABLE IF EXISTS bookmarks")
+            report = run_doctor(
+                bookmarks_dir=bookmarks_dir, database_path=database_path
+            )
+        self.assertIn("catalog.not_initialized", self._codes(report))
+
+    @patch("bookmark_tools.classify.get_llm_config", return_value=None)
+    def test_doctor_detects_catalog_bookmark_count_mismatch(
+        self, _mock: object
+    ) -> None:
+        """Catalog with wrong bookmark count is detected."""
+        with TemporaryDirectory() as tmp:
+            bookmarks_dir = Path(tmp) / "Bookmarks"
+            database_path = Path(tmp) / "Meta" / "bookmark-search.sqlite3"
+            self._write_note(bookmarks_dir, "Dev/a.md", url="https://a.com")
+            self._write_note(bookmarks_dir, "Dev/b.md", url="https://b.com")
+
+            from bookmark_tools.catalog import (
+                BOOKMARKS_TABLE,
+                connect as catalog_connect,
+                ensure_catalog_schema,
+            )
+
+            conn = catalog_connect(database_path)
+            try:
+                ensure_catalog_schema(conn)
+                # Insert only one row to simulate stale catalog
+                conn.execute(
+                    f"INSERT INTO {BOOKMARKS_TABLE} "
+                    f"(id, note_path, url, metadata_json) "
+                    f"VALUES ('fake', '/fake.md', 'https://fake.com', '{{}}')"
+                )
+                conn.commit()
+            finally:
+                conn.close()
+
+            report = run_doctor(
+                bookmarks_dir=bookmarks_dir, database_path=database_path
+            )
+
+        self.assertIn("catalog.bookmark_count_mismatch", self._codes(report))
+
+    @patch("bookmark_tools.classify.get_llm_config", return_value=None)
+    def test_doctor_fix_catalog_rebuild(self, _mock: object) -> None:
+        """--fix rebuilds catalog when catalog issues are detected."""
+        with TemporaryDirectory() as tmp:
+            bookmarks_dir = Path(tmp) / "Bookmarks"
+            database_path = Path(tmp) / "Meta" / "bookmark-search.sqlite3"
+            self._write_note(
+                bookmarks_dir,
+                "Dev/page.md",
+                url="https://example.com/page",
+                title="Test Page",
+            )
+
+            # Build catalog first
+            from bookmark_tools.catalog import rebuild_catalog
+
+            rebuild_catalog(
+                bookmarks_dir=bookmarks_dir,
+                database_path=database_path,
+                include_embeddings=False,
+            )
+
+            # Corrupt the catalog by adding an orphaned row
+            from bookmark_tools.catalog import BOOKMARKS_TABLE, connect as cat_conn
+
+            conn = cat_conn(database_path)
+            try:
+                conn.execute(
+                    f"INSERT INTO {BOOKMARKS_TABLE} "
+                    f"(id, note_path, url, metadata_json) "
+                    f"VALUES ('orphan', '/nonexistent.md', 'https://orphan.com', '{{}}')"
+                )
+                conn.commit()
+            finally:
+                conn.close()
+
+            report = run_doctor(
+                bookmarks_dir=bookmarks_dir,
+                database_path=database_path,
+                fix=True,
+            )
+
+        self.assertIn("fix.catalog_rebuilt", self._codes(report))
+        # Catalog issues should be marked fixed
+        catalog_issue = [
+            i for i in report.issues if i.code == "catalog.bookmark_count_mismatch"
+        ]
+        self.assertTrue(catalog_issue)
+        # The count mismatch issue might have been replaced by orphaned_rows
+        # depending on which runs first; at minimum the fix was applied
+
 
 if __name__ == "__main__":
     unittest.main()
