@@ -453,6 +453,29 @@ def _save_archive(target_path: Path, content: str) -> Path:
     return archive_path
 
 
+def _refresh_catalog_on_create(note_path: Path) -> None:
+    """Insert or update the catalog bookmarks row for a newly written note.
+
+    Silently skips if the catalog database is not available.
+    """
+    try:
+        from .catalog import connect as catalog_connect, upsert_bookmark
+        from .paths import get_bookmarks_dir, get_search_index_path
+
+        database_path = get_search_index_path()
+        if not database_path.exists():
+            return
+        bookmarks_dir = get_bookmarks_dir()
+        connection = catalog_connect(database_path)
+        try:
+            with connection:
+                upsert_bookmark(connection, note_path, bookmarks_dir)
+        finally:
+            connection.close()
+    except Exception:  # noqa: BLE001
+        pass
+
+
 class BatchFailure:
     """Record of a failed URL during batch processing."""
 
@@ -564,6 +587,7 @@ def _process_single_url(
         except Exception as exc:
             logger.warning("Failed to archive content for %s: %s", url, exc)
     target_path.write_text(note_text, encoding="utf-8")
+    _refresh_catalog_on_create(target_path)
     print(f"Created {target_path}")
     if folder_message:
         print(folder_message)
