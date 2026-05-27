@@ -13,7 +13,7 @@ A healthy vault should be recoverable from the Markdown notes under `BOOKMARKS_D
 | Category | Examples | Rule |
 |---|---|---|
 | Canonical user knowledge | Bookmark notes under `BOOKMARKS_DIR/**/*.md`; user-written summaries/notes; classification guide. | Preserve and treat as authoritative. |
-| Derived from Markdown | SQLite FTS index, embedding rows, future chunk/edge/catalog tables, generated topic/domain/tag pages. | Rebuild from canonical notes. Do not require backup. |
+| Derived from Markdown | SQLite catalog (bookmarks, FTS, embeddings, fetch_log, chunks, edges, jobs), future generated topic/domain/tag pages. | Rebuild from canonical notes. Do not require backup. |
 | Cache / raw fetch data | `*.content.md` archive sidecars, future raw HTML/text/PDF snapshots, HTTP headers. | May be deleted, although recrawl can be lossy if the source URL changes or disappears. |
 | Runtime-only state | Future jobs, checkpoints, progress rows, transient failure records. | Not user knowledge; may be dropped or retried. |
 | Local secrets/config | `.env`, API keys, local path/provider settings. | Never commit secrets. Validate before commands run. |
@@ -93,11 +93,22 @@ Sidecars are cache/raw data. They can support search or future recrawl/change wo
 
 ## Derived search state
 
-The SQLite search database (`BOOKMARK_SEARCH_INDEX`, defaulting under `$VAULT_PATH/Meta/`) is derived state. It contains FTS rows and embeddings generated from bookmark notes. It is safe to delete and rebuild with `bookmark-rebuild`.
+The SQLite search database (`BOOKMARK_SEARCH_INDEX`, defaulting under `$VAULT_PATH/Meta/`) is derived state. It contains FTS rows, embeddings, and a unified catalog of bookmark metadata generated from canonical Markdown notes. It is safe to delete and rebuild with `bookmark-rebuild` or `bookmark-rebuild --catalog`.
 
-Commands that update, delete, or reorganize bookmarks should update the derived index when practical, but Markdown remains authoritative if the two diverge. `bookmark-doctor` reports missing, corrupt, stale, or incomplete search state and `bookmark-doctor --fix` can safely rebuild the search index from Markdown.
+The unified catalog (managed by `bookmark_tools/catalog.py`) consolidates:
 
-Embedding rows record the configured embedding model and vector dimensions used to create them. Semantic search refuses mismatched embedding stores, and `bookmark-doctor` reports model/dimension drift so the store can be rebuilt. Provider/model settings are resolved by `bookmark_tools/config.py` from CLI overrides, environment variables, `bookmark-tools.toml`, and defaults.
+- **bookmarks** table: derived metadata (id, URLs, domain, folder, title, content hash, full frontmatter JSON)
+- **FTS5** virtual table: full-text search over title, tags, folder, topic, description, body
+- **embedding_store** table: semantic search vectors with model/dimension tracking
+- **fetch_log** table: fetch history for future recrawl/change detection
+- **note_chunks** table: stub for future chunk-level retrieval
+- **edges** table: stub for future graph/link support
+- **jobs** table: stub for future job/checkpoint tracking
+- **catalog_meta** table: schema version tracking
+
+All tables are created with schema version 1 and are entirely rebuildable from `Bookmarks/**/*.md`. The catalog schema is ensured automatically whenever any module opens the database, so legacy workflows that only use FTS/embeddings continue to work unchanged.
+
+Commands that update, delete, or reorganize bookmarks maintain catalog rows when practical, but Markdown remains authoritative if the two diverge. `bookmark-doctor` reports catalog schema version mismatches, bookmark count inconsistencies, and orphaned catalog rows. `bookmark-doctor --fix` can safely rebuild the catalog from Markdown.
 
 ## Doctor and rebuild contract
 
@@ -111,11 +122,16 @@ Embedding rows record the configured embedding model and vector dimensions used 
 - missing archive paths and orphan `*.content.md` sidecars,
 - missing/corrupt/stale search indexes and notes missing from FTS,
 - embedding model/dimension mismatch,
-- broken Obsidian `[[internal links]]`.
+- broken Obsidian `[[internal links]]`,
+- catalog schema version mismatches,
+- catalog bookmark count inconsistencies,
+- orphaned catalog rows for deleted notes.
 
 `bookmark-doctor --json` emits a stable report object with `status`, `score`, `summary`, path fields, and issue records. `bookmark-doctor --fix` only performs safe derived-state repairs (currently search rebuilds and embedding rebuilds when API configuration is available). It must not delete notes or alter human-authored Markdown.
 
-`bookmark-rebuild` reconstructs current derived state from Markdown: FTS search is always rebuilt; embeddings are rebuilt only when API configuration is available or skipped with an explicit reason.
+`bookmark-rebuild` reconstructs current derived state from Markdown: FTS search is always rebuilt; embeddings are rebuilt only when API configuration is available or skipped with an explicit reason. `bookmark-rebuild --catalog` rebuilds the full unified catalog including bookmarks, FTS, embeddings, and stub tables.
+
+`bookmark-doctor --fix` only performs safe derived-state repairs: catalog rebuilds, search rebuilds, and embedding rebuilds when API configuration is available. It must not delete notes or alter human-authored Markdown.
 
 ## Path validation
 
