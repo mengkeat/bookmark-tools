@@ -5,6 +5,7 @@ import logging
 from pathlib import Path
 from typing import Sequence
 
+from .catalog import upsert_bookmark
 from .classify import (
     call_llm,
     find_existing_url,
@@ -18,13 +19,39 @@ from .cli import (
 )
 from .fetch import extract_page_data
 from .logging_config import configure_logging
-from .paths import BookmarkPathError, load_env, require_bookmarks_dir
+from .paths import (
+    BookmarkPathError,
+    get_search_index_path,
+    load_env,
+    require_bookmarks_dir,
+)
 from .render import render_note
 from .summarize import generate_summary
 from .url_normalize import normalize_url
 from .vault_profile import collect_existing_notes, read_frontmatter
 
 logger = logging.getLogger(__name__)
+
+
+def _refresh_catalog_row(note_path: Path, bookmarks_dir: Path) -> None:
+    """Update the catalog bookmarks table for a single note.
+
+    Silently skips catalog refresh if the database is not available.
+    """
+    from .catalog import connect as catalog_connect
+
+    database_path = get_search_index_path()
+    if not database_path.exists():
+        return
+    try:
+        connection = catalog_connect(database_path)
+        try:
+            with connection:
+                upsert_bookmark(connection, note_path, bookmarks_dir)
+        finally:
+            connection.close()
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("Catalog refresh skipped for %s: %s", note_path, exc)
 
 
 def find_note_by_url(url: str, bookmarks_dir: Path | None = None) -> Path | None:
@@ -116,6 +143,7 @@ def update_bookmark(
 
     if not dry_run:
         note_path.write_text(note_text, encoding="utf-8")
+        _refresh_catalog_row(note_path, bookmarks_dir)
 
     return note_path, note_text
 
