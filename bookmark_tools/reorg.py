@@ -128,6 +128,27 @@ def apply_reclassifications(
         except Exception as exc:  # noqa: BLE001
             logger.warning("Search index refresh failed after moves: %s", exc)
 
+        # Refresh catalog bookmarks to reflect new paths
+        try:
+            from .catalog import (
+                connect as catalog_connect,
+                ensure_catalog_schema,
+                populate_bookmarks,
+            )
+            from .paths import get_search_index_path
+
+            database_path = get_search_index_path()
+            if database_path.exists():
+                connection = catalog_connect(database_path)
+                try:
+                    with connection:
+                        ensure_catalog_schema(connection)
+                        populate_bookmarks(connection, bookmarks_dir)
+                finally:
+                    connection.close()
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("Catalog refresh skipped after reorg: %s", exc)
+
     return moved, errors
 
 
