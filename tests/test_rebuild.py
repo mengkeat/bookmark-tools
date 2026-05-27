@@ -108,6 +108,70 @@ class BookmarkRebuildTest(unittest.TestCase):
         self.assertTrue(payload["search_rebuilt"])
         self.assertFalse(payload["embeddings_rebuilt"])
 
+    @patch("bookmark_tools.classify.get_llm_config", return_value=None)
+    def test_rebuild_catalog_flag_rebuilds_all_tables(self, _mock: object) -> None:
+        """--catalog rebuilds the unified catalog with bookmarks table."""
+        with TemporaryDirectory() as tmp:
+            bookmarks_dir = Path(tmp) / "Bookmarks"
+            database_path = Path(tmp) / "Meta" / "bookmark-search.sqlite3"
+            self._write_note(bookmarks_dir, "Development/python-search.md")
+
+            result = rebuild_derived_state(
+                bookmarks_dir=bookmarks_dir,
+                database_path=database_path,
+                include_embeddings=False,
+                include_catalog=True,
+            )
+
+            self.assertTrue(result.catalog_rebuilt)
+            self.assertTrue(result.search_rebuilt)
+            self.assertEqual(result.document_count, 1)
+
+            # Verify bookmarks table is populated
+            from bookmark_tools.catalog import (
+                BOOKMARKS_TABLE,
+                connect as catalog_connect,
+            )
+
+            conn = catalog_connect(database_path)
+            try:
+                row = conn.execute(
+                    f"SELECT title FROM {BOOKMARKS_TABLE}"
+                ).fetchone()
+                self.assertIsNotNone(row)
+                self.assertEqual(row["title"], "Python Search")
+            finally:
+                conn.close()
+
+    @patch("bookmark_tools.classify.get_llm_config", return_value=None)
+    def test_rebuild_catalog_can_be_deleted_and_restored(self, _mock: object) -> None:
+        """Full catalog can be deleted and rebuilt from Markdown."""
+        with TemporaryDirectory() as tmp:
+            bookmarks_dir = Path(tmp) / "Bookmarks"
+            database_path = Path(tmp) / "Meta" / "bookmark-search.sqlite3"
+            self._write_note(bookmarks_dir, "Development/python-search.md")
+
+            # First build
+            rebuild_derived_state(
+                bookmarks_dir=bookmarks_dir,
+                database_path=database_path,
+                include_embeddings=False,
+                include_catalog=True,
+            )
+
+            # Delete and rebuild
+            database_path.unlink()
+            result = rebuild_derived_state(
+                bookmarks_dir=bookmarks_dir,
+                database_path=database_path,
+                include_embeddings=False,
+                include_catalog=True,
+            )
+
+            results = search_index("python", database_path=database_path)
+            self.assertTrue(result.catalog_rebuilt)
+            self.assertEqual(len(results), 1)
+
 
 if __name__ == "__main__":
     unittest.main()
