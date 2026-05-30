@@ -434,6 +434,34 @@ class DeleteFromCatalogTest(unittest.TestCase):
             # Should not raise
             delete_from_catalog(Path("/fake.md"), database_path=db_path)
 
+    def test_delete_removes_edges(self) -> None:
+        with TemporaryDirectory() as tmp:
+            bookmarks_dir = Path(tmp) / "Bookmarks"
+            db_path = Path(tmp) / "catalog.sqlite3"
+            note_path = _write_note(bookmarks_dir, "Testing/test.md")
+
+            conn = connect(db_path)
+            try:
+                with conn:
+                    ensure_catalog_schema(conn)
+                    populate_bookmarks(conn, bookmarks_dir)
+                    upsert_bookmark(conn, note_path, bookmarks_dir)
+                self.assertGreater(
+                    conn.execute(f"SELECT COUNT(*) FROM {EDGES_TABLE}").fetchone()[0], 0
+                )
+            finally:
+                conn.close()
+
+            delete_from_catalog(note_path, database_path=db_path)
+
+            conn = connect(db_path)
+            try:
+                self.assertEqual(
+                    conn.execute(f"SELECT COUNT(*) FROM {EDGES_TABLE}").fetchone()[0], 0
+                )
+            finally:
+                conn.close()
+
 
 class RebuildCatalogTest(unittest.TestCase):
     """Test full catalog rebuild."""
@@ -469,6 +497,28 @@ class RebuildCatalogTest(unittest.TestCase):
             results = search_index("sqlite", database_path=db_path)
             self.assertEqual(len(results), 1)
             self.assertEqual(results[0].title, "SQLite Guide")
+
+    @patch("bookmark_tools.classify.get_llm_config", return_value=None)
+    def test_rebuild_populates_edges(self, _mock: object) -> None:
+        with TemporaryDirectory() as tmp:
+            bookmarks_dir = Path(tmp) / "Bookmarks"
+            db_path = Path(tmp) / "catalog.sqlite3"
+            _write_note(bookmarks_dir, "Testing/test.md", tags="[alpha, beta]")
+
+            rebuild_catalog(
+                bookmarks_dir=bookmarks_dir,
+                database_path=db_path,
+                include_embeddings=False,
+            )
+
+            conn = connect(db_path)
+            try:
+                edge_count = conn.execute(
+                    f"SELECT COUNT(*) FROM {EDGES_TABLE}"
+                ).fetchone()[0]
+                self.assertGreater(edge_count, 0)
+            finally:
+                conn.close()
 
     @patch("bookmark_tools.classify.get_llm_config", return_value=None)
     def test_rebuild_can_be_deleted_and_restored(self, _mock: object) -> None:
