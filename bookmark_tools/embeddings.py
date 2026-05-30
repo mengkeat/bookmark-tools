@@ -339,6 +339,32 @@ def _insert_embeddings(
 # ---------------------------------------------------------------------------
 
 
+def _select_changed_chunks(
+    chunks: list[SearchChunk],
+    stored_metadata: dict[tuple[str, int], tuple[float, str, int, str]],
+    *,
+    model: str,
+    dimensions: int,
+) -> list[SearchChunk]:
+    """Return chunks that are new or whose mtime, model, dims, or hash changed."""
+    changed: list[SearchChunk] = []
+    for chunk in chunks:
+        key = (str(chunk.path), chunk.chunk_index)
+        stored = stored_metadata.get(key)
+        if stored is None:
+            changed.append(chunk)
+            continue
+        stored_mtime, stored_model, stored_dimensions, stored_hash = stored
+        if (
+            chunk.path.stat().st_mtime != stored_mtime
+            or stored_model != model
+            or stored_dimensions != dimensions
+            or stored_hash != chunk.text_hash
+        ):
+            changed.append(chunk)
+    return changed
+
+
 def refresh_embeddings(
     documents: list[SearchDocument],
     *,
@@ -370,22 +396,9 @@ def refresh_embeddings(
         current_keys = {(str(chunk.path), chunk.chunk_index) for chunk in chunks}
 
         removed_keys = stored_metadata.keys() - current_keys
-        changed_chunks: list[SearchChunk] = []
-        for chunk in chunks:
-            key = (str(chunk.path), chunk.chunk_index)
-            if key not in stored_metadata:
-                changed_chunks.append(chunk)
-                continue
-            stored_mtime, stored_model, stored_dimensions, stored_hash = (
-                stored_metadata[key]
-            )
-            if (
-                chunk.path.stat().st_mtime != stored_mtime
-                or stored_model != model
-                or stored_dimensions != dimensions
-                or stored_hash != chunk.text_hash
-            ):
-                changed_chunks.append(chunk)
+        changed_chunks = _select_changed_chunks(
+            chunks, stored_metadata, model=model, dimensions=dimensions
+        )
 
         if not removed_keys and not changed_chunks:
             return
