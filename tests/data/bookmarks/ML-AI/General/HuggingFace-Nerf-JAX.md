@@ -1,6 +1,6 @@
 ---
 schema_version: 1
-id: 72f28014a0a6851435fb70d88574443e9edfaded6ddfa4ab6ab0b5d97455f131
+id: fbae562b86e02beb1526a0600df02ddde19841732ceaaca0a65535cb0b303740
 title: Hugging Face NeRF in JAX
 url: https://www.youtube.com/watch?v=A9iefUXkvQU
 final_url: https://www.youtube.com/watch?v=A9iefUXkvQU

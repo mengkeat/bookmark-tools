@@ -1,40 +1,142 @@
-# Personal bookmark retrieval queries
+# Personal bookmark retrieval queries for ML-AI test dataset
 #
-# Each entry is a query you'd type to find a specific bookmark, paired with
-# the expected relevant note IDs. The eval runner scores how well BM25,
-# semantic, and hybrid search surface those notes.
+# Queries are designed to exercise BM25 keyword matching and cross-topic
+# semantic similarity against the 47-note ML-AI test corpus in
+# tests/data/bookmarks/.
 #
 # Schema:
-#   - query:         The search text (required)
-#     relevant_ids:  List of note `id:` values — SHA-256 of the normalized URL (required)
-#     mode_hint:     bm25 | semantic | hybrid  (optional, documents which mode should excel)
-#     notes:         Context or rationale (optional)
-#
-# Finding a note's id:
-#   grep "^id:" "/path/to/note.md"
-#   OR: bookmark-search "<title>" --format json | python -c "import sys,json; [print(r['path']) for r in json.load(sys.stdin)]"
-#   Then: grep "^id:" "<path>"
-#
-# Validation: bookmark-eval run search --dataset personal checks that every
-# relevant_id exists in the current vault. IDs are stable across renames and
-# reorgs (they are the SHA-256 of the canonical URL).
-#
-# Examples (replace with your own):
-#
-# - query: "sqlite full text search python"
-#   relevant_ids:
-#     - 4a8f2c1e...  # replace with actual 64-char hex ID
-#   mode_hint: bm25
-#   notes: FTS5 tutorial bookmarked from sqlite.org docs
-#
-# - query: "managing attention focus productivity"
-#   relevant_ids:
-#     - b91d3f7a...
-#     - c23e5b8d...
-#   mode_hint: semantic
-#   notes: Two essays on deep work — semantic search should find both
-#
-# - query: "vector embeddings cosine similarity"
-#   relevant_ids:
-#     - 7f4c9a2b...
-#   mode_hint: hybrid
+#   - query:         Search text (required)
+#     relevant_ids:  Note `id:` values — SHA-256 of the normalized URL (required)
+#     mode_hint:     bm25 | semantic | hybrid  (optional)
+#     notes:         Context (optional)
+
+# --- Direct keyword hits (BM25 should excel) ---
+
+- query: flash attention memory efficient transformer
+  relevant_ids:
+    - ad02975f2acfdaac9829d56231d0d1c8aba2dd926b29c231261ac79fc7ddf488
+  mode_hint: bm25
+  notes: Flash Attention from First Principles — exact keyword match
+
+- query: DINO self-supervised vision transformer
+  relevant_ids:
+    - bc09c139c8e97fad07b6d096536872d2d3564d4e9c796f389c91d21fae32f172
+    - fde439889f1548bf3410cd1614316cff030d824907f621217129c9199c75f139
+  mode_hint: bm25
+  notes: DINOv3 video + Self-Supervised Learning cookbook — both about DINO/SSL for vision
+
+- query: diffusion models VAE score matching
+  relevant_ids:
+    - 282e83d29d28e3682af4d90d796207b161ad58ce66857e1e02c713f48b94985b
+  mode_hint: bm25
+  notes: Understanding Diffusion Models paper — direct keyword hit
+
+- query: reinforcement learning pokemon game agent
+  relevant_ids:
+    - 1e658664ccf055b3655210da1f8fad776b6c95b7e1d354c2b4e329c78ef700c0
+  mode_hint: bm25
+  notes: Pokemon RL article — exact topic match
+
+- query: LLM fine-tuning LoRA course
+  relevant_ids:
+    - 0abcb8d6878db0f0e92da53e6699c272c1d1e1717aa18c7b3bbcd6737aa388c2
+  mode_hint: bm25
+  notes: Maxime Labonne LLM Course — covers fine-tuning and LoRA
+
+- query: JAX autodiff gradient cookbook
+  relevant_ids:
+    - c30cd24ce2b48c689e50468f27833c1e976840e6a2c4e4dd575f6b6e7135c90f
+  mode_hint: bm25
+  notes: JAX Autodiff Cookbook — direct keyword hit
+
+- query: loss landscape neural network optimization
+  relevant_ids:
+    - 11c84e95c997aa61f176ff266bee0a38b5b9a3c72cd093a9a35dab0110cf2f68
+  mode_hint: bm25
+  notes: Loss Landscape article — exact match
+
+# --- Cross-topic semantic queries ---
+
+- query: how to scale distributed training across GPUs
+  relevant_ids:
+    - 667756c486cca6a088efb4126527ce2d1bce3d1cea031fc2f7ced19586e6b69b
+    - 5b020b97c2d18c807bf41229a60a298965044faa4429961ef029aca883725ac5
+    - 61b34e675785873a3ee09b67829c6479b7cc667cf64254de59de4f6a46ca08b4
+  mode_hint: semantic
+  notes: Scaling Book, Ultrascale Playbook, GPU Computing — all about scaling/hardware
+
+- query: understanding attention mechanism in transformers
+  relevant_ids:
+    - ad02975f2acfdaac9829d56231d0d1c8aba2dd926b29c231261ac79fc7ddf488
+    - b9a213436a28a446984a51d2bc162ccef07f6762a593c8445944f46d8d564aae
+    - fd9f2e7bf2994ceadd0b05fbd6696b7dde7c9d3ac1639bac587b4a5c406af7e0
+    - 23188f83a414084aedaa4def9056c8f2d993c76f199b52ab873b18846aa824b9
+  mode_hint: semantic
+  notes: Flash Attention, Linear Transformers, Random Transformer, Retrieval Transformer — all about attention
+
+- query: self-supervised representation learning without labels
+  relevant_ids:
+    - bc09c139c8e97fad07b6d096536872d2d3564d4e9c796f389c91d21fae32f172
+    - fde439889f1548bf3410cd1614316cff030d824907f621217129c9199c75f139
+    - 4c4e437ee78c8b711f4de4ac342938048321e6f5fee3a79e53c35a356d635648
+  mode_hint: semantic
+  notes: DINOv3, SSL Cookbook, ViTs Work — all about self-supervised learning
+
+- query: generative models image generation
+  relevant_ids:
+    - 282e83d29d28e3682af4d90d796207b161ad58ce66857e1e02c713f48b94985b
+    - e486b20b41ace61cc090c7c6306b0319586339c3e45d2b5f32fe5229594b9b2a
+    - 33b5179a4a56b8f6dad6d036145041837cffe752f4a4ca9fb3bfd6d09eb0bb28
+    - fbae562b86e02beb1526a0600df02ddde19841732ceaaca0a65535cb0b303740
+  mode_hint: semantic
+  notes: Diffusion papers + VQ-VAE/DALL-E + NeRF/JAX — all generative
+
+- query: implementing LLM inference from scratch
+  relevant_ids:
+    - 842410ee660d0f268e92eccee969499d594677c44f259202f86b1c700c57c3d5
+    - c050e190dad5877116fb73b3475571dc779200c8c9c78317dbb85b70304f4e4b
+    - f39ac0c1952f411d90592f097253ba27c177d98f60a1da4c8664a138bba10be3
+  mode_hint: semantic
+  notes: Llama Nuts and Bolts, Serving LLM on Apple Silicon, LLM Training Puzzles — LLM internals
+
+- query: probabilistic Bayesian uncertainty deep learning
+  relevant_ids:
+    - e85a30063f83bfc0d89bcdaf87e2a1b8cc47d4530ead47ede59f82af441ba41a
+    - d5477aa8a8bd115773d46f4f2e6790dc554908a253e8fcd37a4245227ac506fd
+    - 003c0891b8d5a8e00ad81c9b2b5c3be4c21663ba0fc53ccc4a90dcf23b2c141f
+  mode_hint: semantic
+  notes: Probabilistic AI, KL-MLE, Statistics+DL Nonparametric — all probability/stats related
+
+# --- Hybrid queries (keyword + semantic overlap) ---
+
+- query: transformer architecture tutorial
+  relevant_ids:
+    - fd9f2e7bf2994ceadd0b05fbd6696b7dde7c9d3ac1639bac587b4a5c406af7e0
+    - b9a213436a28a446984a51d2bc162ccef07f6762a593c8445944f46d8d564aae
+    - 23188f83a414084aedaa4def9056c8f2d993c76f199b52ab873b18846aa824b9
+  mode_hint: hybrid
+  notes: Random Transformer, Linear Transformers, Retrieval Transformer — architecture tutorials
+
+- query: graph neural networks tutorial deepmind
+  relevant_ids:
+    - a71c744905e3514ca729bfb001a9e1213a35ebbf0abb790effee847deb955ee4
+  mode_hint: hybrid
+  notes: Deepmind GNN Tutorial — direct hit
+
+- query: RAG retrieval augmented generation
+  relevant_ids:
+    - b4025f4c86a73681b898f4c9c6614e4ac955aa322499873ecf1d1fb140c3e892
+  mode_hint: hybrid
+  notes: Curated RAG Blog Posts — direct keyword match
+
+- query: self-driving autonomous vehicles
+  relevant_ids:
+    - f3ce7026acaf0b40f1d4cede1cbaca940a1398c787a5a502de0c881ea625e783
+  mode_hint: hybrid
+  notes: On Self-Driving Cars course
+
+- query: Stanford machine learning course Andrew Ng
+  relevant_ids:
+    - d43d6776d3cc63cfb5dac781ed36b59a734607760ede08391fdeee718fb9ea42
+  mode_hint: hybrid
+  notes: Stanford CS230 — keyword match on Stanford and ML

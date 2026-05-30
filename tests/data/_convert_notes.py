@@ -59,22 +59,12 @@ SCHEMA_V1_FIELD_ORDER = [
 ]
 
 
-def normalize_url(url: str) -> str:
-    """Normalize URL for stable ID generation."""
-    parsed = urllib.parse.urlsplit(url.strip())
-    scheme = parsed.scheme.lower() or "https"
-    host = (parsed.hostname or "").lower()
-    port = parsed.port
-    path = parsed.path.rstrip("/")
-    if port == {"http": 80, "https": 443}.get(scheme):
-        port = None
-    netloc = host if not port else f"{host}:{port}"
-    return urllib.parse.urlunsplit((scheme, netloc, path, "", ""))
-
-
 def stable_bookmark_id(url: str) -> str:
-    normalized = normalize_url(url)
-    return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
+    """Use the project's own stable ID derivation to avoid collisions."""
+    from bookmark_tools.url_normalize import normalize_url
+    from bookmark_tools.note_schema import stable_bookmark_id as _sbi
+
+    return _sbi(url)
 
 
 def domain_from_url(url: str) -> str:
