@@ -16,6 +16,11 @@ from .classify import get_llm_config
 from .paths import DEFAULT_TIMEOUT, get_search_index_path
 from .search_documents import SearchDocument
 
+try:
+    import numpy as _np
+except ImportError:  # pragma: no cover - numpy is a declared dependency
+    _np = None
+
 EMBEDDING_TABLE = "embedding_store"
 EMBEDDING_MODEL = DEFAULT_EMBEDDING_MODEL
 EMBEDDING_DIMENSIONS = DEFAULT_EMBEDDING_DIMENSIONS
@@ -451,20 +456,17 @@ def _cosine_similarities(
     stored_vectors: list[list[float]],
 ) -> list[float]:
     """Compute cosine similarity via dot product (vectors are pre-normalized)."""
-    try:
-        import numpy as np
-
-        query_array = np.array(query_vector, dtype=np.float32)
-        stored_matrix = np.array(stored_vectors, dtype=np.float32)
+    if _np is not None:
+        query_array = _np.array(query_vector, dtype=_np.float32)
+        stored_matrix = _np.array(stored_vectors, dtype=_np.float32)
         return (stored_matrix @ query_array).tolist()
-    except ImportError:
-        return [
-            sum(
-                query_value * stored_value
-                for query_value, stored_value in zip(query_vector, stored_vector)
-            )
-            for stored_vector in stored_vectors
-        ]
+    return [
+        sum(
+            query_value * stored_value
+            for query_value, stored_value in zip(query_vector, stored_vector)
+        )
+        for stored_vector in stored_vectors
+    ]
 
 
 def semantic_search(
