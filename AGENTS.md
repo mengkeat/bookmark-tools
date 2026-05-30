@@ -205,7 +205,7 @@ Start with rows marked **Mutable**. Most implementation changes should be confin
 | `bookmark_tools/__init__.py` | Package re-export | `main` (re-exported from cli) | Read-Only |
 | `bookmark_tools/__main__.py` | Package runner | Calls `cli.main()` | Read-Only |
 | `bookmark_tools/search.py` | Search orchestration: CLI argument parsing, BM25/semantic/hybrid search, result formatting, logging | `main()`, `search_bookmarks()`, `search_bookmarks_semantic()`, `search_bookmarks_hybrid()`, `_reciprocal_rank_fusion()`, `parse_args()`, `configure_logging()` | **Mutable** (business logic) |
-| `bookmark_tools/catalog.py` | Unified SQLite catalog: schema versioning, migrations, bookmarks metadata, fetch_log, stubs for chunks/edges/jobs, compatibility wrappers | `connect()`, `ensure_catalog_schema()`, `rebuild_catalog()`, `delete_from_catalog()`, `upsert_bookmark()`, `populate_bookmarks()`, `get_catalog_info()`, `CatalogResult`, `CatalogInfo` | Read-Only (utility) |
+| `bookmark_tools/catalog.py` | Unified SQLite catalog: schema versioning, migrations, bookmarks metadata, fetch_log, chunks, edges (populated via `graph.py`), jobs stub, compatibility wrappers | `connect()`, `ensure_catalog_schema()`, `rebuild_catalog()`, `delete_from_catalog()`, `upsert_bookmark()`, `populate_bookmarks()`, `get_catalog_info()`, `CatalogResult`, `CatalogInfo` | Read-Only (utility) |
 | `bookmark_tools/search_index.py` | SQLite FTS5 index management: schema creation, chunked BM25-weighted search, query sanitization | `rebuild_search_index()`, `update_search_index()`, `search_index()`, `SearchResult` | Read-Only (utility) |
 | `bookmark_tools/search_documents.py` | Document collection: reads vault notes and preserves body text for chunking in `SearchDocument` records | `collect_search_documents()`, `SearchDocument` | Read-Only (utility) |
 | `bookmark_tools/chunking.py` | Section-aware chunk generation for FTS, embeddings, and catalog chunk rows | `chunk_document()`, `chunk_documents()`, `SearchChunk` | Read-Only (utility) |
@@ -215,6 +215,9 @@ Start with rows marked **Mutable**. Most implementation changes should be confin
 | `bookmark_tools/stats.py` | Bookmark statistics: analytics, metrics collection, vault statistics reporting | **Mutable** (business logic) |
 | `bookmark_tools/tag_normalize.py` | Tag normalization: tag standardization, deduplication, and consistency enforcement | **Mutable** (business logic) |
 | `bookmark_tools/update.py` | Bookmark updates: URL updates, metadata refresh, batch update operations | **Mutable** (business logic) |
+| `bookmark_tools/graph.py` | Deterministic graph: edge extraction (in_folder/has_tag/from_domain/links_to_url/related_to), edge table rebuild/upsert/delete, backlinks, related suggestions, BFS traversal | `extract_edges()`, `rebuild_edges()`, `upsert_edges_for_note()`, `replace_edges_for_bookmark()`, `get_backlinks()`, `get_related()`, `traverse()`, `Edge`, `Backlink`, `RelatedBookmark` | **Mutable** (business logic) |
+| `bookmark_tools/graph_cli.py` | `bookmark-backlinks` and `bookmark-graph` commands: resolve URL/path to bookmark id, query edges, text/JSON output | `backlinks_main()`, `graph_main()` | **Mutable** (business logic) |
+| `bookmark_tools/hubs.py` | Topic/domain/tag hub page generation with protected generated blocks, orphan pruning, `bookmark-topics` CLI | `build_hub_pages()`, `main()`, `HubResult` | **Mutable** (business logic) |
 | `bookmark_tools/config/` | Configuration files and settings | Read-Only (config) |
 | `tests/test_bookmarks.py` | Unit tests (unittest) for helpers + summary pipeline behavior | `BookmarkHelpersTest` (14 tests) | Test file |
 | `tests/test_bookmark_search.py` | Unit tests (unittest) for search: document collection, BM25 ranking, folder filtering | `BookmarkSearchTest` | Test file |
@@ -227,6 +230,9 @@ Start with rows marked **Mutable**. Most implementation changes should be confin
 | `tests/test_note_filter.py` | Unit tests for note filter: archive sidecar detection, bookmark path iteration | `IsArchiveSidecarTest`, `IterBookmarkNotePathsTest` | Test file |
 | `tests/test_paths.py` | Unit tests for paths: fail-fast vault validation, directory resolution | `RequireBookmarksDirTest`, `GetBookmarksDirTest` | Test file |
 | `tests/test_url_normalize.py` | Unit tests for URL normalization: scheme/host, default ports, path, identity | `NormalizeUrlTest` | Test file |
+| `tests/test_graph.py` | Unit tests for graph: edge extraction, persistence, backlinks, related, traversal | `ExtractEdgesTests`, `ExtractBodyUrlsTests`, `GraphPersistenceTests` | Test file |
+| `tests/test_graph_cli.py` | Unit tests for graph CLIs: backlinks/graph resolution, JSON output, error paths | `BacklinksCliTest`, `GraphCliTest` | Test file |
+| `tests/test_hubs.py` | Unit tests for hub generation: tag/domain/topic pages, rebuild, human-content preservation, pruning | `BuildHubPagesTest`, `HubsCliTest` | Test file |
 | `tests/test_link.py` | Unit tests for link module: URL validation, link operations | Test file |
 | `tests/test_render.py` | Unit tests for render module: note rendering, frontmatter generation | Test file |
 | `tests/test_reorg.py` | Unit tests for reorg module: bookmark reorganization, folder moves | Test file |
