@@ -246,8 +246,13 @@ def _load_stored_metadata(
 
 def _delete_by_paths(connection: sqlite3.Connection, paths: set[str]) -> None:
     """Remove embedding rows by path."""
-    for path in paths:
-        connection.execute(f"DELETE FROM {EMBEDDING_TABLE} WHERE path = ?", (path,))
+    if not paths:
+        return
+    path_list = list(paths)
+    placeholders = ",".join("?" * len(path_list))
+    connection.execute(
+        f"DELETE FROM {EMBEDDING_TABLE} WHERE path IN ({placeholders})", path_list
+    )
 
 
 def _delete_by_chunk_keys(
@@ -255,11 +260,15 @@ def _delete_by_chunk_keys(
     keys: set[tuple[str, int]],
 ) -> None:
     """Remove embedding rows by (path, chunk_index)."""
-    for path, chunk_index in keys:
-        connection.execute(
-            f"DELETE FROM {EMBEDDING_TABLE} WHERE path = ? AND chunk_index = ?",
-            (path, chunk_index),
-        )
+    if not keys:
+        return
+    key_list = list(keys)
+    placeholders = ",".join("(?, ?)" for _ in key_list)
+    params = [field for key in key_list for field in key]
+    connection.execute(
+        f"DELETE FROM {EMBEDDING_TABLE} WHERE (path, chunk_index) IN ({placeholders})",
+        params,
+    )
 
 
 def delete_from_embedding_store(
