@@ -225,6 +225,51 @@ class BookmarkExistsError(Exception):
     """Raised when a bookmark for the given URL already exists."""
 
 
+def _classify_page(
+    page_data: PageData,
+    profile: BookmarkProfile,
+    similar_notes: list[SimilarNote],
+    allow_new_subfolder: bool,
+) -> tuple[BookmarkMetadata, BookmarkMetadata | None]:
+    """Classify a page, returning (metadata, llm_metadata).
+
+    ``llm_metadata`` is None when the LLM was unavailable and heuristic
+    classification was used instead.
+    """
+    logger.info("Classifying bookmark with LLM…")
+    llm_metadata = call_llm(page_data, profile, similar_notes, allow_new_subfolder)
+    if llm_metadata:
+        logger.info("LLM classification succeeded.")
+    else:
+        logger.info("LLM unavailable; using heuristic classification.")
+    metadata = llm_metadata or heuristic_classification(
+        page_data, profile, similar_notes
+    )
+    return metadata, llm_metadata
+
+
+def _resolve_target_path(
+    existing: Path | None,
+    force: bool,
+    bookmarks_dir: Path,
+    folder: str,
+    title: str,
+) -> tuple[Path, str | None]:
+    """Return (target_path, existing_note_text) for a new or overwritten note.
+
+    When force-overwriting an existing note, its text is returned so human
+    sections can be preserved; otherwise a fresh, unique path is created.
+    """
+    if existing and force:
+        try:
+            existing_note_text = existing.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            existing_note_text = None
+        return existing, existing_note_text
+    target_path = uniquify_path((bookmarks_dir / folder) / slugify_filename(title))
+    return target_path, None
+
+
 def build_note(
     url: str,
     allow_new_subfolder: bool,
@@ -257,14 +302,8 @@ def build_note(
                 f"Bookmark already exists (redirect of {url}): {existing_by_final}"
             )
     similar_notes = rank_similar_notes(page_data, profile)
-    logger.info("Classifying bookmark with LLM…")
-    llm_metadata = call_llm(page_data, profile, similar_notes, allow_new_subfolder)
-    if llm_metadata:
-        logger.info("LLM classification succeeded.")
-    else:
-        logger.info("LLM unavailable; using heuristic classification.")
-    metadata = llm_metadata or heuristic_classification(
-        page_data, profile, similar_notes
+    metadata, llm_metadata = _classify_page(
+        page_data, profile, similar_notes, allow_new_subfolder
     )
     classification_summary = (
         str(llm_metadata.get("summary", "")).strip() if llm_metadata else ""
@@ -288,18 +327,9 @@ def build_note(
         used_llm_classification=llm_metadata is not None,
         summary_override=summary_override,
     )
-    if existing and force:
-        target_path = existing
-        # Read existing note body to preserve human sections during forced overwrite
-        try:
-            existing_note_text = existing.read_text(encoding="utf-8")
-        except (OSError, UnicodeDecodeError):
-            existing_note_text = None
-    else:
-        target_path = uniquify_path(
-            (bookmarks_dir / folder) / slugify_filename(str(metadata["title"]))
-        )
-        existing_note_text = None
+    target_path, existing_note_text = _resolve_target_path(
+        existing, force, bookmarks_dir, folder, str(metadata["title"])
+    )
     # When force-overwriting, preserve the original URL for stable identity
     if existing_note_text:
         from .note_schema import parse_note_text
