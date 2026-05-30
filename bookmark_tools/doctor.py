@@ -325,6 +325,25 @@ def _check_search_index(
         return True
 
     current_mtimes = {str(doc.path): doc.path.stat().st_mtime for doc in documents}
+    stored_mtimes = _read_index_mtimes(report, database_path)
+    if stored_mtimes is None:
+        # An integrity/schema issue was recorded; a rebuild will repair it.
+        return True
+    return _report_index_staleness(
+        report, database_path, current_mtimes, stored_mtimes
+    )
+
+
+def _read_index_mtimes(
+    report: DoctorReport,
+    database_path: Path,
+) -> dict[str, float] | None:
+    """Return stored note mtimes, or None if the index must be rebuilt.
+
+    Records a corruption or schema issue on the report when the database
+    fails its integrity check, is missing required tables, or cannot be
+    read; in those cases the caller should rebuild.
+    """
     try:
         connection = sqlite3.connect(database_path)
         try:
@@ -339,7 +358,7 @@ def _check_search_index(
                         fixable=True,
                     )
                 )
-                return True
+                return None
 
             tables = _table_names(connection)
             if SEARCH_TABLE not in tables or MTIME_TABLE not in tables:
@@ -357,12 +376,12 @@ def _check_search_index(
                         fixable=True,
                     )
                 )
-                return True
+                return None
 
             rows = connection.execute(
                 f"SELECT path, mtime FROM {MTIME_TABLE}"
             ).fetchall()
-            stored_mtimes = {str(row[0]): float(row[1]) for row in rows}
+            return {str(row[0]): float(row[1]) for row in rows}
         finally:
             connection.close()
     except sqlite3.DatabaseError as exc:
@@ -375,8 +394,20 @@ def _check_search_index(
                 fixable=True,
             )
         )
-        return True
+        return None
 
+
+def _report_index_staleness(
+    report: DoctorReport,
+    database_path: Path,
+    current_mtimes: dict[str, float],
+    stored_mtimes: dict[str, float],
+) -> bool:
+    """Compare current vs. indexed mtimes and report any drift.
+
+    Returns True when the index is out of date (notes missing, stale, or
+    removed) and should be rebuilt.
+    """
     missing = sorted(set(current_mtimes) - set(stored_mtimes))
     removed = sorted(set(stored_mtimes) - set(current_mtimes))
     stale = sorted(
@@ -385,9 +416,7 @@ def _check_search_index(
         if path in stored_mtimes and stored_mtimes[path] != mtime
     )
 
-    needs_rebuild = False
     if missing:
-        needs_rebuild = True
         report.add_issue(
             _issue(
                 "search.notes_missing",
@@ -399,7 +428,6 @@ def _check_search_index(
             )
         )
     if stale:
-        needs_rebuild = True
         report.add_issue(
             _issue(
                 "search.stale",
@@ -411,7 +439,6 @@ def _check_search_index(
             )
         )
     if removed:
-        needs_rebuild = True
         report.add_issue(
             _issue(
                 "search.removed_notes",
@@ -422,7 +449,7 @@ def _check_search_index(
                 fixable=True,
             )
         )
-    return needs_rebuild
+    return bool(missing or stale or removed)
 
 
 def _check_embedding_store(report: DoctorReport) -> bool:
