@@ -17,6 +17,8 @@ CLI tools for fetching, classifying, summarizing, and searching bookmarks in an 
 - **Link health checking**: Validate all bookmarked URLs with `bookmark-check` to find dead links.
 - **Vault statistics**: View bookmark counts, tag distribution, and folder stats with `bookmark-stats`.
 - **Folder reorganization**: Propose folder reclassifications with `bookmark-reorg`.
+- **Deterministic graph**: Backlinks, related-bookmark suggestions, and depth-limited traversal over tag/domain/topic/link edges with `bookmark-backlinks` and `bookmark-graph`.
+- **Generated hubs**: Rebuildable topic/domain/tag index pages with `bookmark-topics`, using protected generated blocks.
 - **Tag normalization**: Consistent lowercase kebab-case tags with abbreviation alias resolution.
 - **Related-topic metadata**: Populate `related` and `parent_topic` fields from LLM or heuristic signals.
 - **Schema validation**: `validate_schema_v1()` checks required fields, stable ID format, URL validity, domain consistency, and timestamp formats — ready for `bookmark-doctor` health checks.
@@ -251,6 +253,26 @@ uv run bookmark-reorg [--llm] [--verbose] [--quiet]
 
 Proposes folder reclassifications for existing bookmarks based on the current classifier. Uses heuristics by default; pass `--llm` to use LLM-based classification.
 
+### Graph and backlinks
+
+```bash
+# Bookmarks that link to a given bookmark (optionally with shared-attribute neighbors)
+uv run bookmark-backlinks <url-or-path> [--related] [--json]
+
+# Breadth-first traversal over shared tags/domain/topics and resolved links
+uv run bookmark-graph <url-or-path> [--depth N] [--json]
+```
+
+Edges are extracted deterministically from each note's frontmatter and body (no LLM): `in_folder`, `has_tag`, `from_domain`, `links_to_url`, and `related_to`. They live in the catalog `edges` table and are kept in sync as bookmarks are created, updated, and deleted. Run `bookmark-rebuild --catalog` to (re)build them from Markdown.
+
+### Topic/domain/tag hubs
+
+```bash
+uv run bookmark-topics rebuild [--kind tag,domain,topic] [--no-prune] [--json]
+```
+
+Generates hub index pages grouping bookmarks by parent topic, domain, and tag under `Meta/bookmark-hubs/` (outside `Bookmarks/`, so they are never scanned as bookmarks). Each page keeps its bookmark list in a protected `bookmark-tools:hub` generated block; human-authored content outside the block is preserved, and hubs are fully rebuildable from canonical notes.
+
 ## How it works
 
 When you run `uv run bookmark <URL>`, the tool:
@@ -441,7 +463,10 @@ Error: evals/datasets/personal/queries.yaml entry 0, relevant_ids[0]:
 - `bookmark_tools/note_schema.py` — Schema v1 parser, renderer, validation, and identity helpers
 - `bookmark_tools/note_filter.py` — Bookmark vs sidecar/non-bookmark filtering for vault scans
 - `bookmark_tools/url_normalize.py` — URL identity and canonicalization
-- `tests/` — Unit and integration tests (320 tests across 23 files)
+- `bookmark_tools/graph.py` — Deterministic edge extraction, backlinks, related suggestions, and traversal
+- `bookmark_tools/graph_cli.py` — `bookmark-backlinks` and `bookmark-graph` commands
+- `bookmark_tools/hubs.py` — Topic/domain/tag hub generation (`bookmark-topics`)
+- `tests/` — Unit and integration tests
 - `evals/` — Retrieval benchmark suite (`bookmark-eval` CLI)
 - `evals/datasets/beir/` — BEIR public dataset adapter (nfcorpus, scifact)
 - `evals/datasets/personal/queries.yaml` — Hand-labeled personal query set; populate to benchmark against your vault

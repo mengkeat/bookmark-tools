@@ -174,11 +174,20 @@ def _delete_by_paths(
     connection: sqlite3.Connection,
     paths: set[str],
 ) -> None:
-    """Remove entries from both the FTS and mtime tables by path."""
-    for path in paths:
-        connection.execute(f"DELETE FROM {SEARCH_TABLE} WHERE path = ?", (path,))
-        connection.execute(f"DELETE FROM {MTIME_TABLE} WHERE path = ?", (path,))
-        connection.execute(f"DELETE FROM {CHUNKS_TABLE} WHERE note_path = ?", (path,))
+    """Remove entries from the FTS, mtime, and chunk tables by path."""
+    if not paths:
+        return
+    path_list = list(paths)
+    placeholders = ",".join("?" * len(path_list))
+    connection.execute(
+        f"DELETE FROM {SEARCH_TABLE} WHERE path IN ({placeholders})", path_list
+    )
+    connection.execute(
+        f"DELETE FROM {MTIME_TABLE} WHERE path IN ({placeholders})", path_list
+    )
+    connection.execute(
+        f"DELETE FROM {CHUNKS_TABLE} WHERE note_path IN ({placeholders})", path_list
+    )
 
 
 def delete_from_search_index(

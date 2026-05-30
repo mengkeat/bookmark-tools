@@ -139,6 +139,58 @@ def split_frontmatter(text: str) -> tuple[str, str]:
     return "", text
 
 
+def _read_single_quoted_scalar(text: str, pos: int) -> tuple[str, int]:
+    """Read a single-quoted scalar at ``pos``; ``''`` is a literal quote.
+
+    Returns the scalar value and the position just past the closing quote.
+    """
+    pos += 1  # skip opening quote
+    length = len(text)
+    parts: list[str] = []
+    while pos < length:
+        if text[pos] == "'":
+            if pos + 1 < length and text[pos + 1] == "'":
+                parts.append("'")
+                pos += 2
+            else:
+                pos += 1  # closing quote
+                break
+        else:
+            parts.append(text[pos])
+            pos += 1
+    return "".join(parts), pos
+
+
+def _read_double_quoted_scalar(text: str, pos: int) -> tuple[str, int]:
+    """Read a double-quoted scalar at ``pos`` using JSON escape semantics.
+
+    Returns the scalar value and the position just past the closing quote.
+    """
+    pos += 1  # skip opening quote
+    length = len(text)
+    start = pos
+    while pos < length and text[pos] != '"':
+        if text[pos] == "\\":
+            pos += 1  # skip escaped char
+        pos += 1
+    raw = text[start:pos]
+    if pos < length:
+        pos += 1  # skip closing quote
+    try:
+        return json.loads('"' + raw + '"'), pos
+    except json.JSONDecodeError:
+        return raw.replace('\\"', '"').replace("\\\\", "\\"), pos
+
+
+def _read_plain_scalar(text: str, pos: int) -> tuple[str, int]:
+    """Read an unquoted scalar at ``pos`` up to the next comma or end."""
+    start = pos
+    length = len(text)
+    while pos < length and text[pos] != ",":
+        pos += 1
+    return text[start:pos].strip(), pos
+
+
 def _parse_inline_list(value: str) -> list[str]:
     """Parse a YAML flow sequence (``[a, 'b', "c"]``) into a list of strings.
 
@@ -156,53 +208,22 @@ def _parse_inline_list(value: str) -> list[str]:
     pos = 0
     length = len(inner)
     while pos < length:
-        # skip leading whitespace
-        while pos < length and inner[pos] in " \t":
+        while pos < length and inner[pos] in " \t":  # skip leading whitespace
             pos += 1
         if pos >= length:
             break
-        ch = inner[pos]
-        if ch == "'":
-            # single-quoted scalar
-            pos += 1
-            parts: list[str] = []
-            while pos < length:
-                if inner[pos] == "'":
-                    if pos + 1 < length and inner[pos + 1] == "'":
-                        parts.append("'")
-                        pos += 2
-                    else:
-                        pos += 1
-                        break
-                else:
-                    parts.append(inner[pos])
-                    pos += 1
-            items.append("".join(parts))
-        elif ch == '"':
-            # double-quoted scalar — use JSON semantics
-            pos += 1
-            start = pos
-            while pos < length and inner[pos] != '"':
-                if inner[pos] == "\\":
-                    pos += 1  # skip escaped char
-                pos += 1
-            raw = inner[start:pos]
-            if pos < length:
-                pos += 1  # skip closing quote
-            try:
-                items.append(json.loads('"' + raw + '"'))
-            except json.JSONDecodeError:
-                items.append(raw.replace('\\"', '"').replace("\\\\", "\\"))
+        quote = inner[pos]
+        if quote == "'":
+            item, pos = _read_single_quoted_scalar(inner, pos)
+            items.append(item)
+        elif quote == '"':
+            item, pos = _read_double_quoted_scalar(inner, pos)
+            items.append(item)
         else:
-            # plain scalar — read until comma or end
-            start = pos
-            while pos < length and inner[pos] != ",":
-                pos += 1
-            text = inner[start:pos].strip()
-            if text:
-                items.append(text)
-        # skip trailing whitespace and comma
-        while pos < length and inner[pos] in " \t":
+            item, pos = _read_plain_scalar(inner, pos)
+            if item:
+                items.append(item)
+        while pos < length and inner[pos] in " \t":  # skip trailing whitespace
             pos += 1
         if pos < length and inner[pos] == ",":
             pos += 1
@@ -395,15 +416,22 @@ def update_generated_block(body: str, name: str, content: str) -> str:
 def render_relationships_block(
     *, tags: Sequence[str], related: Sequence[str], domain: str
 ) -> str:
-    """Render deterministic relationship metadata as a generated block body."""
-    lines: list[str] = []
+    """Render deterministic relationship metadata as a generated block body.
+
+    The body includes its own ``## Relationships`` heading so the whole block
+    (heading and content) is removed by :func:`strip_generated_blocks` on
+    re-render, keeping notes idempotent.
+    """
+    lines: list[str] = ["## Relationships", ""]
     if domain:
         lines.append(f"- domain: {domain}")
     if tags:
         lines.append("- tags: " + ", ".join(str(tag) for tag in tags))
     if related:
         lines.append("- related: " + ", ".join(str(item) for item in related))
-    return "\n".join(lines) or "- none"
+    if len(lines) == 2:  # only the heading; no relationships present
+        lines.append("- none")
+    return "\n".join(lines)
 
 
 def render_fetch_timeline_block(
@@ -459,8 +487,28 @@ def render_schema_v1(
     )
     summary_body = "Summary:\n" + generated_block("summary", summary)
     human_body = extract_human_body(existing_body or "")
-    body = summary_body if not human_body else f"{summary_body}\n\n{human_body}"
+    relationships_block = generated_block(
+        "relationships",
+        render_relationships_block(
+            tags=_as_str_list(values.get("tags")),
+            related=_as_str_list(values.get("related")),
+            domain=str(values.get("domain", "")).strip(),
+        ),
+    )
+    parts = [summary_body]
+    if human_body:
+        parts.append(human_body)
+    parts.append(relationships_block)
+    body = "\n\n".join(parts)
     return f"{frontmatter}\n\n{body}\n"
+
+
+def _as_str_list(value: object) -> list[str]:
+    """Coerce a frontmatter value into a list of non-empty strings."""
+    if isinstance(value, list):
+        return [str(item).strip() for item in value if str(item).strip()]
+    text = str(value or "").strip()
+    return [text] if text else []
 
 
 def build_schema_v1_values(

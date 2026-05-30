@@ -47,6 +47,21 @@ def _default_search_index_path() -> Path:
     return Path()
 
 
+def _default_hubs_dir() -> Path:
+    """Return the default generated-hubs directory from configured paths."""
+    vault = _configured_vault_path()
+    if vault is not None:
+        return vault / "Meta" / "bookmark-hubs"
+    bookmarks_override = os.environ.get("BOOKMARKS_DIR", "").strip()
+    if bookmarks_override:
+        return (
+            Path(bookmarks_override).expanduser().resolve().parent
+            / "Meta"
+            / "bookmark-hubs"
+        )
+    return Path()
+
+
 def _default_guide_path() -> Path:
     """Return the default classification guide path from configured vault-like paths."""
     vault = _configured_vault_path()
@@ -131,6 +146,11 @@ def get_search_index_path() -> Path:
     return _resolve_path(
         os.environ.get("BOOKMARK_SEARCH_INDEX"), _default_search_index_path()
     )
+
+
+def get_hubs_dir() -> Path:
+    """Return the configured directory for generated hub pages."""
+    return _resolve_path(os.environ.get("BOOKMARK_HUBS_DIR"), _default_hubs_dir())
 
 
 def get_guide_path() -> Path:

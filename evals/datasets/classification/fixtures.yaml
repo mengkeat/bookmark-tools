@@ -1,9 +1,8 @@
 # Classification eval fixtures
 #
-# This seed set is intentionally small and deterministic so
-# `bookmark-eval run classification --force-heuristic` works as a cheap smoke
-# test without network or LLM calls. Grow it over time by adding 30-80 labeled
-# cases from your vault or hand-curated edge cases.
+# Cases cover the ML-AI folder taxonomy with realistic content snippets
+# derived from the 47-note test dataset. Each case specifies expected
+# folder, type, and tags to evaluate classification accuracy.
 #
 # Schema:
 #   profile_folders: Optional synthetic folders used when --bookmarks-dir is not
@@ -12,24 +11,28 @@
 #   cases:
 #     - id: Stable case id
 #       content_or_url: Plain text content OR an http(s)/file URL
-#       # Alternative source fields: url, content, html
-#       title: Optional title used for content/html fixtures
-#       description: Optional description used for content/html fixtures
+#       title: Optional title
+#       description: Optional description
 #       expected_folder: Exact folder expected after folder validation
 #       expected_type: article | video | course | tool | paper | book
 #       expected_tags: Tags treated as the relevant set for tag P/R/F1
 #       profile_folders: Optional per-case synthetic folders
-#       profile_notes: Optional per-case synthetic notes for similarity context
+#       profile_notes: Optional per-case synthetic notes
 #       allow_new_subfolder: Optional bool, default false
-#
-# Bootstrap idea: copy existing curated note frontmatter into cases, using the
-# note body or archived content as `content`. The snapshot records
-# classification_prompt_version so prompt/model changes are attributable.
 
 profile_folders:
   - Development
+  - ML-AI
+  - ML-AI/General
+  - ML-AI/LLMs
+  - ML-AI/Computer-Vision
+  - ML-AI/Diffusion
+  - ML-AI/Reinforcement-Learning
+  - ML-AI/Agents
 
 cases:
+  # --- Development cases (original) ---
+
   - id: dev-python-cli
     title: Python Command Line Tooling Guide
     description: A practical article about Python command line applications and developer workflow.
@@ -67,3 +70,230 @@ cases:
     expected_tags:
       - development
       - python
+
+  # --- ML-AI General cases ---
+
+  - id: ml-attention-mechanism
+    title: Attention Mechanisms Explained
+    description: A comprehensive article explaining attention mechanisms in deep learning.
+    content_or_url: |
+      This article provides a deep dive into attention mechanisms used in
+      modern deep learning architectures. It covers additive attention,
+      dot-product attention, multi-head attention, and their applications
+      in transformer models. The explanation includes mathematical derivations
+      and practical implementation considerations for scaling attention to
+      long sequences.
+    expected_folder: ML-AI/General
+    expected_type: article
+    expected_tags:
+      - attention
+      - transformer
+      - deep-learning
+
+  - id: ml-jax-tutorial
+    title: Getting Started with JAX for Machine Learning
+    description: Tutorial on using JAX for numerical computing and ML research.
+    content_or_url: |
+      JAX is a high-performance numerical computing library that combines
+      NumPy's familiar API with automatic differentiation and GPU/TPU
+      acceleration. This tutorial covers the basics of JAX transformations
+      like grad, jit, vmap, and pmap, along with practical examples for
+      machine learning research and neural network training.
+    expected_folder: ML-AI/General
+    expected_type: tutorial
+    expected_tags:
+      - jax
+      - machine-learning
+      - tutorial
+
+  - id: ml-gpu-optimization
+    title: GPU Memory Optimization for Deep Learning
+    description: Article about GPU memory management and optimization techniques.
+    content_or_url: |
+      GPU memory optimization is critical for training large deep learning
+      models efficiently. This article covers gradient accumulation, mixed
+      precision training, memory profiling, and techniques for fitting larger
+      models into limited GPU memory. It discusses CUDA kernel optimization
+      and memory allocation strategies for both training and inference.
+    expected_folder: ML-AI/General
+    expected_type: article
+    expected_tags:
+      - gpu
+      - optimization
+      - deep-learning
+
+  # --- ML-AI LLMs cases ---
+
+  - id: ml-llm-finetuning
+    title: Fine-Tuning Large Language Models
+    description: Guide to fine-tuning LLMs with LoRA, QLoRA, and RLHF techniques.
+    content_or_url: |
+      Fine-tuning large language models has become essential for adapting
+      pre-trained models to specific tasks. This guide covers supervised
+      fine-tuning (SFT), parameter-efficient methods like LoRA and QLoRA,
+      preference alignment via DPO and PPO, and evaluation of fine-tuned
+      models. It includes practical advice on dataset preparation, hyperparameter
+      selection, and avoiding catastrophic forgetting during training.
+    expected_folder: ML-AI/LLMs
+    expected_type: tutorial
+    expected_tags:
+      - llm
+      - fine-tuning
+      - lora
+
+  - id: ml-llm-inference
+    title: Efficient LLM Inference at Scale
+    description: Article about deploying and optimizing LLM inference serving.
+    content_or_url: |
+      Serving large language models efficiently requires careful optimization
+      of inference pipelines. This article covers quantization techniques
+      (INT8, INT4, GPTQ), speculative decoding, KV-cache management, batching
+      strategies, and deployment frameworks like vLLM and TGI. It discusses
+      throughput vs latency tradeoffs and hardware considerations for
+      production LLM serving.
+    expected_folder: ML-AI/LLMs
+    expected_type: article
+    expected_tags:
+      - llm
+      - inference
+      - deployment
+
+  - id: ml-llm-course
+    title: Stanford LLM Course
+    description: Stanford course on large language models covering architecture and applications.
+    content_or_url: |
+      Stanford's comprehensive course on large language models covers the
+      transformer architecture, pre-training at scale, instruction tuning,
+      retrieval-augmented generation, and safety considerations. The course
+      includes hands-on assignments building components of an LLM from scratch
+      and evaluating model capabilities across different benchmarks.
+    expected_folder: ML-AI/LLMs
+    expected_type: course
+    expected_tags:
+      - llm
+      - course
+      - transformer
+
+  # --- ML-AI Computer Vision cases ---
+
+  - id: ml-vision-transformer
+    title: Vision Transformers for Image Classification
+    description: Paper on applying transformer architectures to computer vision tasks.
+    content_or_url: |
+      Vision Transformers (ViTs) have revolutionized computer vision by applying
+      the transformer architecture directly to image patches. This paper presents
+      experiments showing that ViTs achieve excellent results on image classification
+      benchmarks when pre-trained on large datasets. The analysis covers patch
+      embedding, positional encoding, and the role of self-attention in learning
+      visual representations without convolutional inductive biases.
+    expected_folder: ML-AI/Computer-Vision
+    expected_type: paper
+    expected_tags:
+      - vision-transformer
+      - computer-vision
+      - transformer
+
+  - id: ml-self-supervised-vision
+    title: Self-Supervised Learning for Visual Representations
+    description: Survey of self-supervised methods for learning visual features.
+    content_or_url: |
+      Self-supervised learning has emerged as a powerful paradigm for learning
+      visual representations without labeled data. This survey covers contrastive
+      methods (SimCLR, MoCo), non-contrastive approaches (BYOL, DINO), and
+      masked image modeling (MAE). It analyzes the learned representations through
+      linear probing, k-NN evaluation, and transfer learning to downstream tasks
+      like object detection and segmentation.
+    expected_folder: ML-AI/Computer-Vision
+    expected_type: paper
+    expected_tags:
+      - self-supervised-learning
+      - computer-vision
+      - representation-learning
+
+  # --- ML-AI Diffusion cases ---
+
+  - id: ml-diffusion-models
+    title: Introduction to Diffusion Models
+    description: Tutorial covering the fundamentals of diffusion-based generative models.
+    content_or_url: |
+      Diffusion models are a class of generative models that learn to reverse
+      a gradual noising process. This tutorial covers the mathematical foundations
+      including forward diffusion, reverse denoising, score matching, and the
+      connection to variational inference. It explains DDPM, DDIM sampling,
+      classifier-free guidance, and applications to image generation, inpainting,
+      and conditional synthesis.
+    expected_folder: ML-AI/Diffusion
+    expected_type: article
+    expected_tags:
+      - diffusion-models
+      - generative-ai
+      - deep-learning
+
+  - id: ml-diffusion-course
+    title: MIT Course on Diffusion Models
+    description: MIT CSAIL course covering diffusion models and generative AI.
+    content_or_url: |
+      MIT's course on diffusion models covers the theoretical foundations and
+      practical applications of score-based generative modeling. Topics include
+      stochastic differential equations for diffusion, noise conditioning,
+      architecture design choices, training stability, and connections to
+      normalizing flows and variational autoencoders.
+    expected_folder: ML-AI/Diffusion
+    expected_type: course
+    expected_tags:
+      - diffusion-models
+      - generative-ai
+      - mit
+
+  # --- ML-AI Reinforcement Learning cases ---
+
+  - id: ml-rl-foundations
+    title: Mathematical Foundations of Reinforcement Learning
+    description: Book covering the mathematical theory behind RL algorithms.
+    content_or_url: |
+      This book provides a rigorous mathematical treatment of reinforcement
+      learning, covering Markov decision processes, dynamic programming,
+      Monte Carlo methods, temporal difference learning, and policy gradient
+      methods. It includes proofs of convergence, sample complexity bounds,
+      and connections to optimal control theory.
+    expected_folder: ML-AI/Reinforcement-Learning
+    expected_type: book
+    expected_tags:
+      - reinforcement-learning
+      - theory
+      - mdp
+
+  - id: ml-rl-game-playing
+    title: Training RL Agents to Play Games
+    description: Article on using reinforcement learning for game-playing agents.
+    content_or_url: |
+      Training reinforcement learning agents to play games presents unique
+      challenges including long horizons, sparse rewards, and multi-task
+      objectives. This article describes approaches using policy gradient
+      methods, experience replay, and curriculum learning to build game-playing
+      agents that can handle complex environments requiring strategic planning,
+      exploration, and resource management.
+    expected_folder: ML-AI/Reinforcement-Learning
+    expected_type: article
+    expected_tags:
+      - reinforcement-learning
+      - game-ai
+      - policy-learning
+
+  # --- ML-AI Agents cases ---
+
+  - id: ml-agents-papers
+    title: Implementing ML Research Papers
+    description: Newsletter about implementing recent ML papers in code.
+    content_or_url: |
+      This newsletter bridges the gap between academic research and practical
+      coding by implementing papers from Arxiv into working code. It focuses
+      on translating theoretical machine learning research into executable
+      implementations, helping developers and data scientists understand
+      cutting-edge AI and computer science advancements through hands-on coding.
+    expected_folder: ML-AI/Agents
+    expected_type: newsletter
+    expected_tags:
+      - machine-learning
+      - papers
+      - research

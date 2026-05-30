@@ -16,6 +16,11 @@ from .classify import get_llm_config
 from .paths import DEFAULT_TIMEOUT, get_search_index_path
 from .search_documents import SearchDocument
 
+try:
+    import numpy as _np
+except ImportError:  # pragma: no cover - numpy is a declared dependency
+    _np = None
+
 EMBEDDING_TABLE = "embedding_store"
 EMBEDDING_MODEL = DEFAULT_EMBEDDING_MODEL
 EMBEDDING_DIMENSIONS = DEFAULT_EMBEDDING_DIMENSIONS
@@ -246,8 +251,13 @@ def _load_stored_metadata(
 
 def _delete_by_paths(connection: sqlite3.Connection, paths: set[str]) -> None:
     """Remove embedding rows by path."""
-    for path in paths:
-        connection.execute(f"DELETE FROM {EMBEDDING_TABLE} WHERE path = ?", (path,))
+    if not paths:
+        return
+    path_list = list(paths)
+    placeholders = ",".join("?" * len(path_list))
+    connection.execute(
+        f"DELETE FROM {EMBEDDING_TABLE} WHERE path IN ({placeholders})", path_list
+    )
 
 
 def _delete_by_chunk_keys(
@@ -255,11 +265,15 @@ def _delete_by_chunk_keys(
     keys: set[tuple[str, int]],
 ) -> None:
     """Remove embedding rows by (path, chunk_index)."""
-    for path, chunk_index in keys:
-        connection.execute(
-            f"DELETE FROM {EMBEDDING_TABLE} WHERE path = ? AND chunk_index = ?",
-            (path, chunk_index),
-        )
+    if not keys:
+        return
+    key_list = list(keys)
+    placeholders = ",".join("(?, ?)" for _ in key_list)
+    params = [field for key in key_list for field in key]
+    connection.execute(
+        f"DELETE FROM {EMBEDDING_TABLE} WHERE (path, chunk_index) IN ({placeholders})",
+        params,
+    )
 
 
 def delete_from_embedding_store(
@@ -325,6 +339,32 @@ def _insert_embeddings(
 # ---------------------------------------------------------------------------
 
 
+def _select_changed_chunks(
+    chunks: list[SearchChunk],
+    stored_metadata: dict[tuple[str, int], tuple[float, str, int, str]],
+    *,
+    model: str,
+    dimensions: int,
+) -> list[SearchChunk]:
+    """Return chunks that are new or whose mtime, model, dims, or hash changed."""
+    changed: list[SearchChunk] = []
+    for chunk in chunks:
+        key = (str(chunk.path), chunk.chunk_index)
+        stored = stored_metadata.get(key)
+        if stored is None:
+            changed.append(chunk)
+            continue
+        stored_mtime, stored_model, stored_dimensions, stored_hash = stored
+        if (
+            chunk.path.stat().st_mtime != stored_mtime
+            or stored_model != model
+            or stored_dimensions != dimensions
+            or stored_hash != chunk.text_hash
+        ):
+            changed.append(chunk)
+    return changed
+
+
 def refresh_embeddings(
     documents: list[SearchDocument],
     *,
@@ -356,22 +396,9 @@ def refresh_embeddings(
         current_keys = {(str(chunk.path), chunk.chunk_index) for chunk in chunks}
 
         removed_keys = stored_metadata.keys() - current_keys
-        changed_chunks: list[SearchChunk] = []
-        for chunk in chunks:
-            key = (str(chunk.path), chunk.chunk_index)
-            if key not in stored_metadata:
-                changed_chunks.append(chunk)
-                continue
-            stored_mtime, stored_model, stored_dimensions, stored_hash = (
-                stored_metadata[key]
-            )
-            if (
-                chunk.path.stat().st_mtime != stored_mtime
-                or stored_model != model
-                or stored_dimensions != dimensions
-                or stored_hash != chunk.text_hash
-            ):
-                changed_chunks.append(chunk)
+        changed_chunks = _select_changed_chunks(
+            chunks, stored_metadata, model=model, dimensions=dimensions
+        )
 
         if not removed_keys and not changed_chunks:
             return
@@ -442,20 +469,17 @@ def _cosine_similarities(
     stored_vectors: list[list[float]],
 ) -> list[float]:
     """Compute cosine similarity via dot product (vectors are pre-normalized)."""
-    try:
-        import numpy as np
-
-        query_array = np.array(query_vector, dtype=np.float32)
-        stored_matrix = np.array(stored_vectors, dtype=np.float32)
+    if _np is not None:
+        query_array = _np.array(query_vector, dtype=_np.float32)
+        stored_matrix = _np.array(stored_vectors, dtype=_np.float32)
         return (stored_matrix @ query_array).tolist()
-    except ImportError:
-        return [
-            sum(
-                query_value * stored_value
-                for query_value, stored_value in zip(query_vector, stored_vector)
-            )
-            for stored_vector in stored_vectors
-        ]
+    return [
+        sum(
+            query_value * stored_value
+            for query_value, stored_value in zip(query_vector, stored_vector)
+        )
+        for stored_vector in stored_vectors
+    ]
 
 
 def semantic_search(

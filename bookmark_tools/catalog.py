@@ -474,6 +474,10 @@ def rebuild_catalog(
             # Rebuild FTS via the search_index module (it creates its own
             # connection but the tables already exist, so we insert directly).
             _populate_fts(connection, documents)
+            # Rebuild deterministic graph edges from the same notes.
+            from .graph import rebuild_edges
+
+            rebuild_edges(connection, bookmarks_dir)
     finally:
         connection.close()
 
@@ -600,6 +604,14 @@ def upsert_bookmark(
         """,
         row,
     )
+    # Keep deterministic graph edges in sync with the note.
+    from .graph import replace_edges_for_bookmark, extract_edges, bookmark_id_for_note
+
+    replace_edges_for_bookmark(
+        connection,
+        bookmark_id_for_note(note),
+        extract_edges(note, bookmarks_dir=bookmarks_dir),
+    )
 
 
 def delete_from_catalog(
@@ -630,13 +642,24 @@ def delete_from_catalog(
     connection = connect(database_path)
     try:
         with connection:
-            connection.execute(
-                f"DELETE FROM {BOOKMARKS_TABLE} WHERE note_path = ?",
+            # Capture the bookmark id before deleting its row so dependent
+            # rows keyed by id (fetch_log, edges) can be cleaned up.
+            id_row = connection.execute(
+                f"SELECT id FROM {BOOKMARKS_TABLE} WHERE note_path = ?",
                 (path_str,),
-            )
+            ).fetchone()
             connection.execute(
                 f"DELETE FROM {FETCH_LOG_TABLE} WHERE bookmark_id IN "
                 f"(SELECT id FROM {BOOKMARKS_TABLE} WHERE note_path = ?)",
+                (path_str,),
+            )
+            if id_row is not None:
+                connection.execute(
+                    f"DELETE FROM {EDGES_TABLE} WHERE from_id = ?",
+                    (id_row["id"],),
+                )
+            connection.execute(
+                f"DELETE FROM {BOOKMARKS_TABLE} WHERE note_path = ?",
                 (path_str,),
             )
             connection.execute(

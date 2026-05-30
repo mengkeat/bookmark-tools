@@ -180,6 +180,43 @@ class NoteSchemaRenderTest(unittest.TestCase):
         self.assertNotIn("Old summary.", rendered)
         self.assertIn("## Notes\nKeep this.", rendered)
 
+    def test_render_schema_v1_emits_relationships_block(self) -> None:
+        rendered = render_schema_v1(
+            {
+                "schema_version": 1,
+                "id": "abc",
+                "title": "Example",
+                "url": "https://example.com",
+                "domain": "example.com",
+                "tags": ["python", "web"],
+                "related": ["docs"],
+            },
+            summary="A summary.",
+        )
+        self.assertIn("bookmark-tools:relationships:start", rendered)
+        self.assertIn("## Relationships", rendered)
+        self.assertIn("- domain: example.com", rendered)
+        self.assertIn("- tags: python, web", rendered)
+        self.assertIn("- related: docs", rendered)
+
+    def test_relationships_block_round_trips_without_duplication(self) -> None:
+        values = {
+            "schema_version": 1,
+            "id": "abc",
+            "title": "Example",
+            "url": "https://example.com",
+            "domain": "example.com",
+            "tags": ["python"],
+        }
+        first = render_schema_v1(values, summary="Summary one.")
+        # Re-render using the prior output as the existing body.
+        second = render_schema_v1(
+            values, summary="Summary two.", existing_body=first
+        )
+        self.assertEqual(second.count("bookmark-tools:relationships:start"), 1)
+        self.assertEqual(second.count("## Relationships"), 1)
+        self.assertNotIn("Summary one.", second)
+
     def test_extract_human_body_removes_generated_summary(self) -> None:
         body = (
             "Summary:\n"

@@ -20,6 +20,9 @@ bookmark-delete = "bookmark_tools.delete:main"
 bookmark-doctor = "bookmark_tools.doctor:main"
 bookmark-rebuild = "bookmark_tools.rebuild:main"
 bookmark-reorg = "bookmark_tools.reorg:main"
+bookmark-backlinks = "bookmark_tools.graph_cli:backlinks_main"
+bookmark-graph = "bookmark_tools.graph_cli:graph_main"
+bookmark-topics = "bookmark_tools.hubs:main"
 bookmark-eval = "evals.cli:main"
 
 [tool.uv]
