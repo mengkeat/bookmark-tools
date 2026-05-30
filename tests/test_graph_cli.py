@@ -72,10 +72,13 @@ class GraphCliTestBase(unittest.TestCase):
             connection.close()
 
     def _env(self):
+        # Patch load_env to a no-op so the repo .env does not leak API keys
+        # into os.environ and pollute other tests.
         return patch.multiple(
             "bookmark_tools.graph_cli",
             require_bookmarks_dir=lambda: self.bookmarks_dir,
             get_search_index_path=lambda: self.db_path,
+            load_env=lambda: None,
         )
 
 

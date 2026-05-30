@@ -5,6 +5,7 @@ from __future__ import annotations
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from unittest.mock import patch
 
 from bookmark_tools.hubs import build_hub_pages, main
 
@@ -144,7 +145,9 @@ class BuildHubPagesTest(unittest.TestCase):
 
 class HubsCliTest(unittest.TestCase):
     def test_main_rejects_unknown_kind(self) -> None:
-        rc = main(["rebuild", "--kind", "bogus"])
+        # Patch load_env so the repo .env does not leak into os.environ.
+        with patch("bookmark_tools.hubs.load_env", lambda: None):
+            rc = main(["rebuild", "--kind", "bogus"])
         self.assertEqual(rc, 1)
 
 
