@@ -139,6 +139,58 @@ def split_frontmatter(text: str) -> tuple[str, str]:
     return "", text
 
 
+def _read_single_quoted_scalar(text: str, pos: int) -> tuple[str, int]:
+    """Read a single-quoted scalar at ``pos``; ``''`` is a literal quote.
+
+    Returns the scalar value and the position just past the closing quote.
+    """
+    pos += 1  # skip opening quote
+    length = len(text)
+    parts: list[str] = []
+    while pos < length:
+        if text[pos] == "'":
+            if pos + 1 < length and text[pos + 1] == "'":
+                parts.append("'")
+                pos += 2
+            else:
+                pos += 1  # closing quote
+                break
+        else:
+            parts.append(text[pos])
+            pos += 1
+    return "".join(parts), pos
+
+
+def _read_double_quoted_scalar(text: str, pos: int) -> tuple[str, int]:
+    """Read a double-quoted scalar at ``pos`` using JSON escape semantics.
+
+    Returns the scalar value and the position just past the closing quote.
+    """
+    pos += 1  # skip opening quote
+    length = len(text)
+    start = pos
+    while pos < length and text[pos] != '"':
+        if text[pos] == "\\":
+            pos += 1  # skip escaped char
+        pos += 1
+    raw = text[start:pos]
+    if pos < length:
+        pos += 1  # skip closing quote
+    try:
+        return json.loads('"' + raw + '"'), pos
+    except json.JSONDecodeError:
+        return raw.replace('\\"', '"').replace("\\\\", "\\"), pos
+
+
+def _read_plain_scalar(text: str, pos: int) -> tuple[str, int]:
+    """Read an unquoted scalar at ``pos`` up to the next comma or end."""
+    start = pos
+    length = len(text)
+    while pos < length and text[pos] != ",":
+        pos += 1
+    return text[start:pos].strip(), pos
+
+
 def _parse_inline_list(value: str) -> list[str]:
     """Parse a YAML flow sequence (``[a, 'b', "c"]``) into a list of strings.
 
@@ -156,53 +208,22 @@ def _parse_inline_list(value: str) -> list[str]:
     pos = 0
     length = len(inner)
     while pos < length:
-        # skip leading whitespace
-        while pos < length and inner[pos] in " \t":
+        while pos < length and inner[pos] in " \t":  # skip leading whitespace
             pos += 1
         if pos >= length:
             break
-        ch = inner[pos]
-        if ch == "'":
-            # single-quoted scalar
-            pos += 1
-            parts: list[str] = []
-            while pos < length:
-                if inner[pos] == "'":
-                    if pos + 1 < length and inner[pos + 1] == "'":
-                        parts.append("'")
-                        pos += 2
-                    else:
-                        pos += 1
-                        break
-                else:
-                    parts.append(inner[pos])
-                    pos += 1
-            items.append("".join(parts))
-        elif ch == '"':
-            # double-quoted scalar — use JSON semantics
-            pos += 1
-            start = pos
-            while pos < length and inner[pos] != '"':
-                if inner[pos] == "\\":
-                    pos += 1  # skip escaped char
-                pos += 1
-            raw = inner[start:pos]
-            if pos < length:
-                pos += 1  # skip closing quote
-            try:
-                items.append(json.loads('"' + raw + '"'))
-            except json.JSONDecodeError:
-                items.append(raw.replace('\\"', '"').replace("\\\\", "\\"))
+        quote = inner[pos]
+        if quote == "'":
+            item, pos = _read_single_quoted_scalar(inner, pos)
+            items.append(item)
+        elif quote == '"':
+            item, pos = _read_double_quoted_scalar(inner, pos)
+            items.append(item)
         else:
-            # plain scalar — read until comma or end
-            start = pos
-            while pos < length and inner[pos] != ",":
-                pos += 1
-            text = inner[start:pos].strip()
-            if text:
-                items.append(text)
-        # skip trailing whitespace and comma
-        while pos < length and inner[pos] in " \t":
+            item, pos = _read_plain_scalar(inner, pos)
+            if item:
+                items.append(item)
+        while pos < length and inner[pos] in " \t":  # skip trailing whitespace
             pos += 1
         if pos < length and inner[pos] == ",":
             pos += 1
