@@ -416,15 +416,22 @@ def update_generated_block(body: str, name: str, content: str) -> str:
 def render_relationships_block(
     *, tags: Sequence[str], related: Sequence[str], domain: str
 ) -> str:
-    """Render deterministic relationship metadata as a generated block body."""
-    lines: list[str] = []
+    """Render deterministic relationship metadata as a generated block body.
+
+    The body includes its own ``## Relationships`` heading so the whole block
+    (heading and content) is removed by :func:`strip_generated_blocks` on
+    re-render, keeping notes idempotent.
+    """
+    lines: list[str] = ["## Relationships", ""]
     if domain:
         lines.append(f"- domain: {domain}")
     if tags:
         lines.append("- tags: " + ", ".join(str(tag) for tag in tags))
     if related:
         lines.append("- related: " + ", ".join(str(item) for item in related))
-    return "\n".join(lines) or "- none"
+    if len(lines) == 2:  # only the heading; no relationships present
+        lines.append("- none")
+    return "\n".join(lines)
 
 
 def render_fetch_timeline_block(
@@ -480,8 +487,28 @@ def render_schema_v1(
     )
     summary_body = "Summary:\n" + generated_block("summary", summary)
     human_body = extract_human_body(existing_body or "")
-    body = summary_body if not human_body else f"{summary_body}\n\n{human_body}"
+    relationships_block = generated_block(
+        "relationships",
+        render_relationships_block(
+            tags=_as_str_list(values.get("tags")),
+            related=_as_str_list(values.get("related")),
+            domain=str(values.get("domain", "")).strip(),
+        ),
+    )
+    parts = [summary_body]
+    if human_body:
+        parts.append(human_body)
+    parts.append(relationships_block)
+    body = "\n\n".join(parts)
     return f"{frontmatter}\n\n{body}\n"
+
+
+def _as_str_list(value: object) -> list[str]:
+    """Coerce a frontmatter value into a list of non-empty strings."""
+    if isinstance(value, list):
+        return [str(item).strip() for item in value if str(item).strip()]
+    text = str(value or "").strip()
+    return [text] if text else []
 
 
 def build_schema_v1_values(
