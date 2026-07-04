@@ -31,3 +31,6 @@ dist/
 # SQLite databases
 *.sqlite
 *.sqlite3
+
+# Planning documents (not for commit)
+PLAN.md
